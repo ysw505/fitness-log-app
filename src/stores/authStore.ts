@@ -66,10 +66,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (error) throw error;
     } else {
       // 네이티브에서는 expo-web-browser 사용
+      // EAS 빌드에서는 native scheme 사용
       const redirectUri = makeRedirectUri({
         scheme: 'fitnesslogtemp',
         path: 'auth/callback',
+        // native: 앱 스키마로 리다이렉트
+        native: 'fitnesslogtemp://auth/callback',
       });
+
+      console.log('Redirect URI:', redirectUri);
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -90,8 +95,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (result.type === 'success') {
         const url = result.url;
-        // URL에서 토큰 추출
-        const params = new URLSearchParams(url.split('#')[1]);
+        // URL에서 토큰 추출 (hash fragment 또는 query params)
+        let params: URLSearchParams;
+        if (url.includes('#')) {
+          params = new URLSearchParams(url.split('#')[1]);
+        } else if (url.includes('?')) {
+          params = new URLSearchParams(url.split('?')[1]);
+        } else {
+          throw new Error('Invalid callback URL');
+        }
+
         const accessToken = params.get('access_token');
         const refreshToken = params.get('refresh_token');
 

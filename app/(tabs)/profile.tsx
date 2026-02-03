@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { StyleSheet, TouchableOpacity, Alert, Platform, View as RNView, Modal, Switch } from 'react-native';
+import { StyleSheet, TouchableOpacity, Alert, Platform, View as RNView, Modal, Switch, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 
 import { Text, View, useThemeColors } from '@/components/Themed';
@@ -173,7 +173,11 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View style={[styles.container, dynamicStyles.container]}>
+    <ScrollView
+      style={[styles.container, dynamicStyles.container]}
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
       <RNView style={styles.profileHeader}>
         <RNView style={[styles.avatar, dynamicStyles.primaryBg]}>
           <Text style={styles.avatarText}>
@@ -285,6 +289,8 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       )}
 
+      <RNView style={styles.bottomSpacer} />
+
       {/* 단위 설정 모달 */}
       <Modal
         visible={showUnitModal}
@@ -343,14 +349,20 @@ export default function ProfileScreen() {
           </RNView>
         </TouchableOpacity>
       </Modal>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  scrollContent: {
     padding: 20,
+    paddingBottom: 40,
+  },
+  bottomSpacer: {
+    height: 20,
   },
   profileHeader: {
     alignItems: 'center',

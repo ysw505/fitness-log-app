@@ -11,6 +11,7 @@ import { Text, useThemeColors } from '@/components/Themed';
 import { useExerciseStore, EXERCISE_CATEGORIES } from '@/stores/exerciseStore';
 import { useHistoryStore } from '@/stores/historyStore';
 import { useWorkoutStore } from '@/stores/workoutStore';
+import { useSmartRecommendation } from '@/hooks/useSmartRecommendation';
 import { Exercise } from '@/types/database.types';
 
 // 운동 분할 유형
@@ -33,7 +34,7 @@ const WORKOUT_SPLITS: SplitOption[] = [
     nameEn: 'Push',
     description: '가슴, 어깨, 삼두',
     categories: ['chest', 'shoulders', 'arms'],
-    icon: '💪',
+    icon: '🫸',
   },
   {
     id: 'pull',
@@ -41,7 +42,7 @@ const WORKOUT_SPLITS: SplitOption[] = [
     nameEn: 'Pull',
     description: '등, 이두',
     categories: ['back', 'arms'],
-    icon: '🏋️',
+    icon: '🫷',
   },
   {
     id: 'legs',
@@ -57,7 +58,7 @@ const WORKOUT_SPLITS: SplitOption[] = [
     nameEn: 'Upper',
     description: '가슴, 등, 어깨, 팔',
     categories: ['chest', 'back', 'shoulders', 'arms'],
-    icon: '👆',
+    icon: '🏋️',
   },
   {
     id: 'lower',
@@ -65,7 +66,7 @@ const WORKOUT_SPLITS: SplitOption[] = [
     nameEn: 'Lower',
     description: '하체, 코어',
     categories: ['legs', 'core'],
-    icon: '👇',
+    icon: '🦿',
   },
   {
     id: 'custom',
@@ -73,7 +74,7 @@ const WORKOUT_SPLITS: SplitOption[] = [
     nameEn: 'Custom',
     description: '원하는 부위 선택',
     categories: [],
-    icon: '✏️',
+    icon: '⚙️',
   },
 ];
 
@@ -124,12 +125,18 @@ export default function SmartWorkoutScreen() {
     getCategoryLastPerformed,
   } = useHistoryStore();
   const { startWorkout, addExercise } = useWorkoutStore();
+  const {
+    getMuscleVolumeStatus,
+    getRecoveryStatus: getMuscleRecoveryStatus,
+    MUSCLE_VOLUME_TARGET,
+  } = useSmartRecommendation();
 
   const [selectedSplit, setSelectedSplit] = useState<WorkoutSplit | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedExercises, setSelectedExercises] = useState<Exercise[]>([]);
   const [step, setStep] = useState<'split' | 'categories' | 'exercises'>('split');
   const [isLoading, setIsLoading] = useState(false);
+  const [showVolumeDetails, setShowVolumeDetails] = useState(false);
 
   // 동적 스타일
   const dynamicStyles = useMemo(() => ({
@@ -150,9 +157,12 @@ export default function SmartWorkoutScreen() {
     warningBg: { backgroundColor: colors.warning },
   }), [colors]);
 
-  // 주간 볼륨 데이터
+  // 주간 볼륨 데이터 (레거시 호환)
   const weeklyVolume = useMemo(() => getWeeklyCategorySets(), [getWeeklyCategorySets]);
   const categoryLastPerformed = useMemo(() => getCategoryLastPerformed(), [getCategoryLastPerformed]);
+
+  // 세분화된 근육군 볼륨 (신규)
+  const muscleVolumeStatus = useMemo(() => getMuscleVolumeStatus(), [getMuscleVolumeStatus]);
 
   // 회복 완료된 카테고리 확인
   const getRecoveryStatus = (category: string): 'recovered' | 'recovering' | 'fresh' => {
@@ -481,33 +491,82 @@ export default function SmartWorkoutScreen() {
               ))}
             </RNView>
 
-            {/* 주간 볼륨 현황 */}
-            <Text style={[styles.sectionTitle, dynamicStyles.text]}>
-              주간 볼륨 현황
-            </Text>
-            <RNView style={[styles.volumeCard, dynamicStyles.card]}>
-              {EXERCISE_CATEGORIES.map((cat) => {
-                const recovery = getRecoveryStatus(cat.id);
-                return (
-                  <RNView key={cat.id} style={styles.volumeRow}>
-                    <RNView style={styles.volumeLabel}>
-                      <Text style={[styles.volumeCatName, dynamicStyles.text]}>
-                        {cat.name}
-                      </Text>
-                      {recovery === 'recovering' && (
-                        <Text style={[styles.recoveryBadge, dynamicStyles.warningBg]}>
-                          회복 중
-                        </Text>
-                      )}
-                    </RNView>
-                    <VolumeBar category={cat.id} />
-                  </RNView>
-                );
-              })}
-              <Text style={[styles.volumeHint, dynamicStyles.textTertiary]}>
-                * 주간 10-20세트가 근비대에 최적입니다
+            {/* 주간 볼륨 현황 (접이식) */}
+            <Pressable
+              style={styles.volumeHeader}
+              onPress={() => setShowVolumeDetails(!showVolumeDetails)}
+            >
+              <Text style={[styles.sectionTitle, dynamicStyles.text, { marginBottom: 0 }]}>
+                주간 볼륨 현황
               </Text>
+              <Text style={[styles.volumeToggle, dynamicStyles.primary]}>
+                {showVolumeDetails ? '접기 ▲' : '펼치기 ▼'}
+              </Text>
+            </Pressable>
+
+            {/* 간단한 요약 (항상 표시) */}
+            <RNView style={[styles.volumeSummary, dynamicStyles.card]}>
+              <RNView style={styles.volumeSummaryRow}>
+                {muscleVolumeStatus.filter(m => m.status === 'low').length > 0 ? (
+                  <>
+                    <Text style={[styles.volumeSummaryIcon]}>⚠️</Text>
+                    <Text style={[styles.volumeSummaryText, dynamicStyles.text]}>
+                      볼륨 부족: {muscleVolumeStatus.filter(m => m.status === 'low').map(m => m.muscleName).slice(0, 3).join(', ')}
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={[styles.volumeSummaryIcon]}>✅</Text>
+                    <Text style={[styles.volumeSummaryText, dynamicStyles.text]}>
+                      이번 주 볼륨 적정
+                    </Text>
+                  </>
+                )}
+              </RNView>
             </RNView>
+
+            {/* 상세 볼륨 (접이식) */}
+            {showVolumeDetails && (
+              <RNView style={[styles.volumeCard, dynamicStyles.card]}>
+                {muscleVolumeStatus.map((muscle) => {
+                  const percentage = Math.min(100, (muscle.currentSets / muscle.targetMax) * 100);
+                  let barColor = colors.success;
+                  if (muscle.status === 'low') barColor = colors.warning;
+                  if (muscle.status === 'high') barColor = colors.error;
+
+                  return (
+                    <RNView key={muscle.muscle} style={styles.volumeRow}>
+                      <RNView style={styles.volumeLabel}>
+                        <Text style={[styles.volumeCatName, dynamicStyles.text]}>
+                          {muscle.muscleName}
+                        </Text>
+                        {muscle.recoveryStatus === 'recovering' && (
+                          <Text style={[styles.recoveryBadge, dynamicStyles.warningBg]}>
+                            회복 중
+                          </Text>
+                        )}
+                      </RNView>
+                      <RNView style={styles.volumeContainer}>
+                        <RNView style={[styles.volumeBar, { backgroundColor: colors.cardSecondary }]}>
+                          <RNView
+                            style={[
+                              styles.volumeFill,
+                              { width: `${percentage}%`, backgroundColor: barColor },
+                            ]}
+                          />
+                        </RNView>
+                        <Text style={[styles.volumeText, dynamicStyles.textTertiary]}>
+                          {muscle.currentSets}/{muscle.targetMin}-{muscle.targetMax}
+                        </Text>
+                      </RNView>
+                    </RNView>
+                  );
+                })}
+                <Text style={[styles.volumeHint, dynamicStyles.textTertiary]}>
+                  * 복합운동의 간접 자극이 포함됩니다
+                </Text>
+              </RNView>
+            )}
           </ScrollView>
         </>
       ) : step === 'categories' ? (
@@ -779,6 +838,34 @@ const styles = StyleSheet.create({
   splitDesc: {
     fontSize: 12,
     textAlign: 'center',
+  },
+  volumeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    marginTop: 16,
+  },
+  volumeToggle: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  volumeSummary: {
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  volumeSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  volumeSummaryIcon: {
+    fontSize: 16,
+  },
+  volumeSummaryText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   volumeCard: {
     padding: 16,

@@ -8,12 +8,26 @@ import { useHistoryStore } from '@/stores/historyStore';
 import { useTemplateStore } from '@/stores/templateStore';
 import { useProfileStore } from '@/stores/profileStore';
 import { useAchievementStore, getBadgeById, getBadgeTierColor, BADGES } from '@/stores/achievementStore';
-import WeeklyActivityBar from '@/components/WeeklyActivityBar';
+import { useSmartRecommendation } from '@/hooks/useSmartRecommendation';
+
+// 초보자 팁 데이터
+const BEGINNER_TIPS = [
+  { icon: '💪', tip: '운동 전 5-10분 워밍업으로 부상을 예방하세요', category: '안전' },
+  { icon: '📈', tip: '처음엔 가벼운 무게로 자세를 익히는 게 중요해요', category: '시작' },
+  { icon: '🔄', tip: '같은 부위는 48-72시간 휴식을 주세요', category: '회복' },
+  { icon: '📝', tip: '매 운동을 기록하면 성장을 눈으로 확인할 수 있어요', category: '기록' },
+  { icon: '🎯', tip: 'RPE 7-8 정도로 운동하면 안전하게 성장할 수 있어요', category: '강도' },
+  { icon: '🥗', tip: '단백질은 체중 kg당 1.6-2.2g이 근육 성장에 좋아요', category: '영양' },
+  { icon: '😴', tip: '수면은 근육 회복의 핵심! 7-9시간을 목표로 해요', category: '회복' },
+  { icon: '🏋️', tip: '복합 운동(스쿼트, 데드리프트)이 효율적이에요', category: '운동' },
+  { icon: '⏱️', tip: '세트 사이 2-3분 휴식이 근력 운동에 적합해요', category: '휴식' },
+  { icon: '📅', tip: '일주일에 3-4회 운동이 초보자에게 적당해요', category: '빈도' },
+];
 
 export default function HomeScreen() {
   const colors = useThemeColors();
   const { activeSession, exercises, startWorkout, cancelWorkout } = useWorkoutStore();
-  const { getWeeklyStats, getRecentWorkouts } = useHistoryStore();
+  const { getRecentWorkouts } = useHistoryStore();
   const { templates } = useTemplateStore();
   const { profiles, initLocalProfiles } = useProfileStore();
   const {
@@ -26,14 +40,20 @@ export default function HomeScreen() {
     newBadges,
     clearNewBadges,
   } = useAchievementStore();
+  const { getSmartRecommendation } = useSmartRecommendation();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isSmartLoading, setIsSmartLoading] = useState(false);
   const [showBadgeModal, setShowBadgeModal] = useState(false);
   const [elapsedTime, setElapsedTime] = useState('00:00');
 
   // 프로필 선택 모달 상태
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
+
+  // 초보자 팁 상태 (운동 횟수 10회 이하일 때만 표시)
+  const [tipIndex, setTipIndex] = useState(() => Math.floor(Math.random() * BEGINNER_TIPS.length));
+  const [showTipBanner, setShowTipBanner] = useState(true);
 
   // 로컬 프로필 초기화 (비로그인 시)
   useEffect(() => {
@@ -43,9 +63,21 @@ export default function HomeScreen() {
   }, []);
 
   // 주간 통계
-  const weeklyStats = getWeeklyStats();
   const recentWorkouts = getRecentWorkouts(3);
   const weeklyProgress = getWeeklyProgress();
+  const { completedWorkouts } = useHistoryStore();
+  const totalWorkoutCount = completedWorkouts.length;
+  const isBeginnerUser = totalWorkoutCount <= 10;
+
+  // 다음 팁으로 이동
+  const nextTip = () => {
+    setTipIndex((prev) => (prev + 1) % BEGINNER_TIPS.length);
+  };
+
+  const currentTip = BEGINNER_TIPS[tipIndex];
+
+  // 스마트 추천
+  const smartRecommendation = useMemo(() => getSmartRecommendation(), [getSmartRecommendation]);
 
   // 새 배지 알림 처리
   useEffect(() => {
@@ -61,6 +93,7 @@ export default function HomeScreen() {
     cardSecondary: { backgroundColor: colors.cardSecondary },
     text: { color: colors.text },
     textSecondary: { color: colors.textSecondary },
+    textTertiary: { color: colors.textSecondary, opacity: 0.7 },
     primary: { color: colors.primary },
     primaryBg: { backgroundColor: colors.primary },
     primaryLightBg: { backgroundColor: colors.primaryLight },
@@ -156,6 +189,62 @@ export default function HomeScreen() {
         ? prev.filter((id) => id !== profileId)
         : [...prev, profileId]
     );
+  };
+
+  // 스마트 추천으로 운동 시작
+  const handleStartSmartWorkout = async () => {
+    if (isSmartLoading) return;
+
+    // 프로필이 여러 개면 선택 모달 표시
+    if (profiles.length > 1) {
+      setSelectedProfileIds(profiles.map((p) => p.id));
+      setProfileModalVisible(true);
+      return;
+    }
+
+    setIsSmartLoading(true);
+    try {
+      await startWorkout(smartRecommendation.splitName);
+
+      // 추천 운동들 추가
+      const { addExercise } = useWorkoutStore.getState();
+      for (const exercise of smartRecommendation.exercises) {
+        await addExercise(exercise);
+      }
+
+      router.push('/workout/active');
+    } catch (error: any) {
+      console.error('Failed to start smart workout:', error);
+      alert(error?.message || '운동을 시작할 수 없습니다');
+    } finally {
+      setIsSmartLoading(false);
+    }
+  };
+
+  // 스마트 추천 + 프로필 선택 후 시작
+  const handleConfirmSmartProfiles = async () => {
+    if (selectedProfileIds.length === 0) {
+      alert('최소 1명의 프로필을 선택해주세요');
+      return;
+    }
+
+    setProfileModalVisible(false);
+    setIsSmartLoading(true);
+    try {
+      await startWorkout(smartRecommendation.splitName, selectedProfileIds);
+
+      const { addExercise } = useWorkoutStore.getState();
+      for (const exercise of smartRecommendation.exercises) {
+        await addExercise(exercise);
+      }
+
+      router.push('/workout/active');
+    } catch (error: any) {
+      console.error('Failed to start smart workout:', error);
+      alert(error?.message || '운동을 시작할 수 없습니다');
+    } finally {
+      setIsSmartLoading(false);
+    }
   };
 
   const handleCancelWorkout = () => {
@@ -269,30 +358,100 @@ export default function HomeScreen() {
       style={[styles.container, dynamicStyles.container]}
       contentContainerStyle={styles.content}
     >
-      <Text style={[styles.greeting, dynamicStyles.text]}>오늘도 화이팅! 💪</Text>
+      <Text style={[styles.greeting, dynamicStyles.text]}>오늘의 운동</Text>
+
+      {/* 초보자 팁 배너 (10회 이하 운동 기록 시) */}
+      {isBeginnerUser && showTipBanner && !activeSession && (
+        <RNView style={[styles.tipBanner, dynamicStyles.card]}>
+          <RNView style={styles.tipBannerHeader}>
+            <RNView style={styles.tipBadgeRow}>
+              <Text style={styles.tipBadgeIcon}>💡</Text>
+              <Text style={[styles.tipBadgeText, dynamicStyles.primary]}>초보자 팁</Text>
+            </RNView>
+            <Pressable
+              style={[styles.tipDismissBtn, dynamicStyles.cardSecondary]}
+              onPress={() => setShowTipBanner(false)}
+              hitSlop={8}
+            >
+              <Text style={[styles.tipDismissText, dynamicStyles.textTertiary]}>닫기</Text>
+            </Pressable>
+          </RNView>
+          <RNView style={styles.tipContent}>
+            <Text style={styles.tipIcon}>{currentTip.icon}</Text>
+            <RNView style={styles.tipTextContainer}>
+              <Text style={[styles.tipCategoryLabel, { color: colors.primary }]}>{currentTip.category}</Text>
+              <Text style={[styles.tipText, dynamicStyles.text]}>{currentTip.tip}</Text>
+            </RNView>
+          </RNView>
+          <RNView style={styles.tipFooter}>
+            {/* 진행률 dots */}
+            <RNView style={styles.tipDots}>
+              {BEGINNER_TIPS.slice(0, 5).map((_, idx) => (
+                <RNView
+                  key={idx}
+                  style={[
+                    styles.tipDot,
+                    idx === tipIndex % 5
+                      ? dynamicStyles.primaryBg
+                      : { backgroundColor: colors.border },
+                  ]}
+                />
+              ))}
+            </RNView>
+            <Pressable onPress={nextTip} style={styles.tipNextBtn}>
+              <Text style={[styles.tipNextText, dynamicStyles.primary]}>다음 →</Text>
+            </Pressable>
+          </RNView>
+        </RNView>
+      )}
 
       {activeSession ? (
         <ActiveWorkoutCard />
       ) : (
         <RNView style={styles.startButtons}>
+          {/* 오늘 추천 (원탭 시작) */}
           <Pressable
-            style={[styles.startButton, dynamicStyles.primaryBg, isLoading && styles.startButtonDisabled]}
-            onPress={handleStartWorkout}
-            disabled={isLoading}
+            style={[styles.smartRecommendationCard, dynamicStyles.primaryBg, isSmartLoading && styles.startButtonDisabled]}
+            onPress={handleStartSmartWorkout}
+            disabled={isSmartLoading}
           >
-            <Text style={styles.buttonText}>
-              {isLoading ? '시작 중...' : '🏋️ 빈 운동 시작'}
+            <RNView style={styles.smartRecHeader}>
+              <Text style={styles.smartRecBadge}>오늘 추천</Text>
+              <Text style={styles.smartRecReason}>{smartRecommendation.reason}</Text>
+            </RNView>
+            <Text style={styles.smartRecTitle}>
+              {isSmartLoading ? '시작 중...' : smartRecommendation.splitName}
             </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.smartButton, dynamicStyles.card]}
-            onPress={() => router.push('/workout/smart-workout')}
-          >
-            <Text style={[styles.smartButtonText, dynamicStyles.text]}>✨ 스마트 운동 추천</Text>
-            <Text style={[styles.smartButtonSubtext, dynamicStyles.textSecondary]}>
-              부위 선택 → 자동 추천
+            <Text style={styles.smartRecExercises}>
+              {smartRecommendation.exercises.slice(0, 3).map((e) => e.name_ko || e.name).join(', ')}
+              {smartRecommendation.exercises.length > 3 && ` 외 ${smartRecommendation.exercises.length - 3}개`}
             </Text>
+            <RNView style={styles.smartRecFooter}>
+              <Text style={styles.smartRecCount}>{smartRecommendation.exercises.length}개 운동</Text>
+              <Text style={styles.smartRecAction}>탭하여 바로 시작 →</Text>
+            </RNView>
           </Pressable>
+
+          {/* 빠른 시작 버튼들 */}
+          <RNView style={styles.quickStartRow}>
+            <Pressable
+              style={[styles.quickStartButton, dynamicStyles.card]}
+              onPress={handleStartWorkout}
+              disabled={isLoading}
+            >
+              <Text style={[styles.quickStartIcon]}>📝</Text>
+              <Text style={[styles.quickStartText, dynamicStyles.text]}>
+                {isLoading ? '시작 중...' : '빈 운동'}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.quickStartButton, dynamicStyles.card]}
+              onPress={() => router.push('/workout/smart-workout')}
+            >
+              <Text style={[styles.quickStartIcon]}>🎯</Text>
+              <Text style={[styles.quickStartText, dynamicStyles.text]}>직접 선택</Text>
+            </Pressable>
+          </RNView>
         </RNView>
       )}
 
@@ -328,115 +487,63 @@ export default function HomeScreen() {
         </RNView>
       )}
 
-      {/* 주간 활동 */}
-      <RNView style={styles.weeklySection}>
-        <WeeklyActivityBar />
-      </RNView>
-
-      {/* 스트릭 & 주간 목표 섹션 */}
-      <RNView style={styles.achievementSection}>
-        <RNView style={styles.achievementRow}>
-          {/* 스트릭 카드 */}
-          <RNView style={[styles.streakCard, dynamicStyles.card]}>
-            <Text style={styles.streakIcon}>🔥</Text>
-            <RNView style={styles.streakInfo}>
-              <Text style={[styles.streakValue, dynamicStyles.text]}>{currentStreak}</Text>
-              <Text style={[styles.streakLabel, dynamicStyles.textSecondary]}>연속 운동</Text>
-            </RNView>
-            {longestStreak > 0 && (
-              <Text style={[styles.streakBest, dynamicStyles.textSecondary]}>
-                최고 {longestStreak}일
-              </Text>
-            )}
-          </RNView>
-
-          {/* 주간 목표 카드 */}
-          <Pressable
-            style={[styles.weeklyGoalCard, dynamicStyles.card]}
-            onPress={() => {
-              const newGoal = ((weeklyGoal % 7) + 1);
-              setWeeklyGoal(newGoal);
-            }}
-          >
-            <RNView style={styles.weeklyGoalHeader}>
-              <Text style={[styles.weeklyGoalTitle, dynamicStyles.textSecondary]}>주간 목표</Text>
-              <Text style={[styles.weeklyGoalEdit, dynamicStyles.primary]}>변경</Text>
-            </RNView>
-            <RNView style={styles.weeklyGoalProgress}>
-              <Text style={[styles.weeklyGoalValue, dynamicStyles.text]}>
-                {weeklyProgress.current}/{weeklyProgress.goal}
-              </Text>
-            </RNView>
-            {/* 프로그레스 바 */}
-            <RNView style={[styles.progressBar, dynamicStyles.cardSecondary]}>
-              <RNView
-                style={[
-                  styles.progressFill,
-                  dynamicStyles.primaryBg,
-                  { width: `${weeklyProgress.percent}%` },
-                ]}
-              />
-            </RNView>
-            {weeklyProgress.percent >= 100 && (
-              <Text style={styles.goalComplete}>목표 달성! 🎉</Text>
-            )}
-          </Pressable>
+      {/* 스트릭 배너 (3일 이상일 때만 표시) */}
+      {currentStreak >= 3 && (
+        <RNView style={[styles.streakBanner, dynamicStyles.card]}>
+          <Text style={styles.streakBannerIcon}>🔥</Text>
+          <Text style={[styles.streakBannerText, dynamicStyles.text]}>
+            {currentStreak}일 연속 운동 중!
+          </Text>
+          {longestStreak > currentStreak && (
+            <Text style={[styles.streakBannerBest, dynamicStyles.textSecondary]}>
+              최고 {longestStreak}일
+            </Text>
+          )}
         </RNView>
+      )}
 
-        {/* 획득한 배지 미리보기 */}
-        {earnedBadges.length > 0 && (
-          <Pressable
-            style={[styles.badgesPreview, dynamicStyles.card]}
-            onPress={() => router.push('/profile')}
-          >
-            <RNView style={styles.badgesPreviewHeader}>
-              <Text style={[styles.badgesPreviewTitle, dynamicStyles.text]}>획득한 배지</Text>
-              <Text style={[styles.badgesPreviewCount, dynamicStyles.primary]}>
-                {earnedBadges.length}개
-              </Text>
-            </RNView>
-            <RNView style={styles.badgesPreviewList}>
-              {earnedBadges.slice(-5).reverse().map((earned) => {
-                const badge = getBadgeById(earned.badgeId);
-                if (!badge) return null;
-                return (
-                  <RNView
-                    key={earned.badgeId}
-                    style={[styles.badgeIcon, { backgroundColor: getBadgeTierColor(badge.tier) + '20' }]}
-                  >
-                    <Text style={styles.badgeIconText}>{badge.icon}</Text>
-                  </RNView>
-                );
-              })}
-              {earnedBadges.length > 5 && (
-                <RNView style={[styles.badgeMore, dynamicStyles.cardSecondary]}>
-                  <Text style={[styles.badgeMoreText, dynamicStyles.textSecondary]}>
-                    +{earnedBadges.length - 5}
-                  </Text>
-                </RNView>
-              )}
-            </RNView>
-          </Pressable>
-        )}
-      </RNView>
-
-      <RNView style={styles.quickStats}>
-        <Text style={[styles.sectionTitle, dynamicStyles.text]}>이번 주 요약</Text>
-        <RNView style={styles.statsRow}>
-          <RNView style={[styles.statItem, dynamicStyles.card]}>
-            <Text style={[styles.statValue, dynamicStyles.primary]}>{weeklyStats.workoutCount}</Text>
-            <Text style={[styles.statLabel, dynamicStyles.textSecondary]}>운동 횟수</Text>
-          </RNView>
-          <RNView style={[styles.statItem, dynamicStyles.card]}>
-            <Text style={[styles.statValue, dynamicStyles.primary]}>{weeklyStats.totalMinutes}</Text>
-            <Text style={[styles.statLabel, dynamicStyles.textSecondary]}>총 시간(분)</Text>
-          </RNView>
-          <RNView style={[styles.statItem, dynamicStyles.card]}>
-            <Text style={[styles.statValue, dynamicStyles.primary]}>{Math.round(weeklyStats.totalVolume / 1000)}k</Text>
-            <Text style={[styles.statLabel, dynamicStyles.textSecondary]}>총 볼륨(kg)</Text>
-          </RNView>
+      {/* 주간 목표 (개선된 메시지) */}
+      <Pressable
+        style={[styles.weeklyGoalSection, dynamicStyles.card]}
+        onPress={() => {
+          const newGoal = ((weeklyGoal % 7) + 1);
+          setWeeklyGoal(newGoal);
+        }}
+      >
+        <RNView style={styles.weeklyGoalHeader}>
+          <Text style={[styles.weeklyGoalTitle, dynamicStyles.text]}>이번 주 운동</Text>
+          <Text style={[styles.weeklyGoalEdit, dynamicStyles.primary]}>목표 변경</Text>
         </RNView>
-      </RNView>
+        <RNView style={styles.weeklyGoalContent}>
+          <Text style={[styles.weeklyGoalValue, dynamicStyles.primary]}>
+            {weeklyProgress.current}
+          </Text>
+          <Text style={[styles.weeklyGoalDivider, dynamicStyles.textSecondary]}>/</Text>
+          <Text style={[styles.weeklyGoalTarget, dynamicStyles.textSecondary]}>
+            {weeklyProgress.goal}회
+          </Text>
+        </RNView>
+        {/* 프로그레스 바 */}
+        <RNView style={[styles.progressBar, dynamicStyles.cardSecondary]}>
+          <RNView
+            style={[
+              styles.progressFill,
+              dynamicStyles.primaryBg,
+              { width: `${Math.min(weeklyProgress.percent, 100)}%` },
+            ]}
+          />
+        </RNView>
+        {/* 긍정적 메시지 */}
+        <Text style={[styles.weeklyGoalMessage, dynamicStyles.textSecondary]}>
+          {weeklyProgress.percent >= 100
+            ? '이번 주 목표 달성! 🎉'
+            : weeklyProgress.current === 0
+            ? '첫 운동을 시작해볼까요?'
+            : weeklyProgress.goal - weeklyProgress.current === 1
+            ? '목표까지 딱 1번!'
+            : `목표까지 ${weeklyProgress.goal - weeklyProgress.current}번 남았어요`}
+        </Text>
+      </Pressable>
 
       {/* 최근 운동 */}
       {recentWorkouts.length > 0 && (
@@ -622,23 +729,88 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
   },
-  smartButton: {
+  // 스마트 추천 카드
+  smartRecommendationCard: {
+    padding: 20,
+    borderRadius: 20,
+    shadowColor: '#3b82f6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  smartRecHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  smartRecBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
+    overflow: 'hidden',
+  },
+  smartRecReason: {
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontWeight: '500',
+  },
+  smartRecTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 6,
+  },
+  smartRecExercises: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  smartRecFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  smartRecCount: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontWeight: '500',
+  },
+  smartRecAction: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600',
+  },
+
+  // 빠른 시작 버튼들
+  quickStartRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  quickStartButton: {
+    flex: 1,
     padding: 16,
     borderRadius: 16,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.06,
     shadowRadius: 6,
     elevation: 2,
   },
-  smartButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
+  quickStartIcon: {
+    fontSize: 24,
+    marginBottom: 6,
   },
-  smartButtonSubtext: {
-    fontSize: 13,
+  quickStartText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 
   // 진행 중인 운동 카드
@@ -784,38 +956,83 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // 주간 활동
-  weeklySection: {
-    marginTop: 32,
+  // 스트릭 배너 (3일 이상일 때)
+  streakBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    marginTop: 20,
+    gap: 8,
+  },
+  streakBannerIcon: {
+    fontSize: 20,
+  },
+  streakBannerText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  streakBannerBest: {
+    fontSize: 12,
   },
 
-  // 주간 통계
-  quickStats: {
-    marginTop: 24,
+  // 주간 목표 (개선된)
+  weeklyGoalSection: {
+    marginTop: 20,
+    padding: 16,
+    borderRadius: 16,
   },
+  weeklyGoalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  weeklyGoalTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  weeklyGoalEdit: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  weeklyGoalContent: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 12,
+  },
+  weeklyGoalValue: {
+    fontSize: 36,
+    fontWeight: '700',
+  },
+  weeklyGoalDivider: {
+    fontSize: 24,
+    marginHorizontal: 4,
+  },
+  weeklyGoalTarget: {
+    fontSize: 18,
+  },
+  progressBar: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  weeklyGoalMessage: {
+    fontSize: 13,
+    textAlign: 'center',
+  },
+
+  // 섹션 공통
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 16,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    marginHorizontal: 4,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  statLabel: {
-    fontSize: 12,
-    marginTop: 4,
   },
 
   // 최근 운동
@@ -962,128 +1179,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // 성취 섹션
-  achievementSection: {
-    marginTop: 24,
-    gap: 12,
-  },
-  achievementRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  streakCard: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
-    gap: 12,
-  },
-  streakIcon: {
-    fontSize: 32,
-  },
-  streakInfo: {
-    flex: 1,
-  },
-  streakValue: {
-    fontSize: 28,
-    fontWeight: '700',
-  },
-  streakLabel: {
-    fontSize: 12,
-  },
-  streakBest: {
-    fontSize: 11,
-    position: 'absolute',
-    top: 8,
-    right: 8,
-  },
-  weeklyGoalCard: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 16,
-  },
-  weeklyGoalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  weeklyGoalTitle: {
-    fontSize: 12,
-  },
-  weeklyGoalEdit: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  weeklyGoalProgress: {
-    marginBottom: 8,
-  },
-  weeklyGoalValue: {
-    fontSize: 22,
-    fontWeight: '700',
-  },
-  progressBar: {
-    height: 6,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  goalComplete: {
-    fontSize: 11,
-    color: '#22c55e',
-    fontWeight: '600',
-    marginTop: 6,
-    textAlign: 'center',
-  },
-
-  // 배지 미리보기
-  badgesPreview: {
-    padding: 16,
-    borderRadius: 16,
-  },
-  badgesPreviewHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  badgesPreviewTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  badgesPreviewCount: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  badgesPreviewList: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  badgeIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeIconText: {
-    fontSize: 20,
-  },
-  badgeMore: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeMoreText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
 
   // 새 배지 모달
   badgeModalContent: {
@@ -1131,5 +1226,110 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+
+  // 초보자 팁 배너
+  tipBanner: {
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  tipBannerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  tipCategoryBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  tipCategoryText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  tipBannerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  tipNextText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  tipDismissText: {
+    fontSize: 18,
+    fontWeight: '400',
+  },
+  tipContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 12,
+  },
+  tipIcon: {
+    fontSize: 24,
+  },
+  tipText: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '500',
+  },
+  tipProgress: {
+    fontSize: 11,
+    textAlign: 'right',
+  },
+  // 초보자 팁 배너 - 추가 스타일
+  tipBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tipBadgeIcon: {
+    fontSize: 16,
+  },
+  tipBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  tipDismissBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  tipTextContainer: {
+    flex: 1,
+    gap: 4,
+  },
+  tipCategoryLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  tipFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  tipDots: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  tipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  tipNextBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
   },
 });

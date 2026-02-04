@@ -12,7 +12,9 @@ import {
 
 import { Text, View, useThemeColors } from '@/components/Themed';
 import { useExerciseStore, EXERCISE_CATEGORIES } from '@/stores/exerciseStore';
+import { useHistoryStore } from '@/stores/historyStore';
 import { EQUIPMENT_TYPES } from '@/data/defaultExercises';
+import { EXERCISE_GUIDES } from '@/data/exerciseGuides';
 import { Exercise } from '@/types/database.types';
 
 export default function ExercisesScreen() {
@@ -25,6 +27,28 @@ export default function ExercisesScreen() {
     removeCustomExercise,
     updateCustomExercise,
   } = useExerciseStore();
+
+  const {
+    getExercisesLastPerformed,
+    personalRecords,
+  } = useHistoryStore();
+
+  // 운동별 마지막 수행일 & PR 데이터
+  const lastPerformedDates = useMemo(() => getExercisesLastPerformed(), [getExercisesLastPerformed]);
+
+  // 마지막 수행일 포맷팅
+  const formatLastPerformed = (dateString: string | undefined): string => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return '오늘';
+    if (diffDays === 1) return '어제';
+    if (diffDays < 7) return `${diffDays}일 전`;
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}주 전`;
+    return `${Math.floor(diffDays / 30)}개월 전`;
+  };
 
   const dynamicStyles = useMemo(() => ({
     container: { backgroundColor: colors.background },
@@ -312,49 +336,110 @@ export default function ExercisesScreen() {
                 <Text style={[styles.categorySectionTitle, dynamicStyles.text]}>
                   {(cat as any).icon} {cat.name} ({defaultExercises.length})
                 </Text>
-                {defaultExercises.map((exercise) => (
-                  <Pressable
-                    key={exercise.id}
-                    style={[styles.exerciseItem, dynamicStyles.card]}
-                    onPress={() => handleExercisePress(exercise)}
-                  >
-                    <RNView style={styles.exerciseInfo}>
-                      <Text style={[styles.exerciseName, dynamicStyles.text]}>
-                        {exercise.name_ko || exercise.name}
-                      </Text>
-                      <Text style={[styles.exerciseDetail, dynamicStyles.textSecondary]}>
-                        {exercise.equipment && getEquipmentName(exercise.equipment)}
-                      </Text>
-                    </RNView>
-                  </Pressable>
-                ))}
+                {defaultExercises.map((exercise) => {
+                  const lastPerformed = lastPerformedDates[exercise.id];
+                  const pr = personalRecords[exercise.id];
+
+                  return (
+                    <Pressable
+                      key={exercise.id}
+                      style={[styles.exerciseItem, dynamicStyles.card]}
+                      onPress={() => handleExercisePress(exercise)}
+                    >
+                      <RNView style={styles.exerciseInfo}>
+                        <Text style={[styles.exerciseName, dynamicStyles.text]}>
+                          {exercise.name_ko || exercise.name}
+                        </Text>
+                        <Text style={[styles.exerciseDetail, dynamicStyles.textSecondary]}>
+                          {exercise.equipment && getEquipmentName(exercise.equipment)}
+                        </Text>
+                        {/* 마지막 수행일 & PR 표시 */}
+                        {(lastPerformed || pr) && (
+                          <RNView style={styles.exerciseMeta}>
+                            {lastPerformed && (
+                              <Text style={[styles.exerciseMetaText, dynamicStyles.textTertiary]}>
+                                {formatLastPerformed(lastPerformed)}
+                              </Text>
+                            )}
+                            {pr && (
+                              <Text style={[styles.exerciseMetaText, dynamicStyles.primary]}>
+                                PR {pr.max_weight}kg × {pr.max_reps_at_weight}
+                              </Text>
+                            )}
+                          </RNView>
+                        )}
+                      </RNView>
+                    </Pressable>
+                  );
+                })}
               </RNView>
             );
           })
         ) : (
           // 검색/필터된 목록
-          filteredExercises.map((exercise) => (
-            <Pressable
-              key={exercise.id}
-              style={[styles.exerciseItem, dynamicStyles.card]}
-              onPress={() => handleExercisePress(exercise)}
-            >
-              <Text style={styles.exerciseIcon}>{getCategoryIcon(exercise.category)}</Text>
-              <RNView style={styles.exerciseInfo}>
-                <Text style={[styles.exerciseName, dynamicStyles.text]}>
-                  {exercise.name_ko || exercise.name}
-                </Text>
-                <Text style={[styles.exerciseDetail, dynamicStyles.textSecondary]}>
-                  {getCategoryName(exercise.category)}
-                  {exercise.equipment && ` • ${getEquipmentName(exercise.equipment)}`}
-                  {exercise.is_custom && ' • ⭐'}
-                </Text>
-              </RNView>
-              {exercise.is_custom && (
-                <Text style={[styles.moreIcon, dynamicStyles.textTertiary]}>⋯</Text>
-              )}
-            </Pressable>
-          ))
+          filteredExercises.map((exercise) => {
+            const lastPerformed = lastPerformedDates[exercise.id];
+            const pr = personalRecords[exercise.id];
+
+            return (
+              <Pressable
+                key={exercise.id}
+                style={[styles.exerciseItem, dynamicStyles.card]}
+                onPress={() => handleExercisePress(exercise)}
+              >
+                <Text style={styles.exerciseIcon}>{getCategoryIcon(exercise.category)}</Text>
+                <RNView style={styles.exerciseInfo}>
+                  <RNView style={styles.exerciseNameRow}>
+                    <Text style={[styles.exerciseName, dynamicStyles.text]}>
+                      {exercise.name_ko || exercise.name}
+                    </Text>
+                    {/* 난이도 배지 */}
+                    {EXERCISE_GUIDES[exercise.id] && (
+                      <RNView style={[
+                        styles.levelBadge,
+                        EXERCISE_GUIDES[exercise.id].difficulty === 'beginner' && { backgroundColor: '#22c55e20' },
+                        EXERCISE_GUIDES[exercise.id].difficulty === 'intermediate' && { backgroundColor: '#f59e0b20' },
+                        EXERCISE_GUIDES[exercise.id].difficulty === 'advanced' && { backgroundColor: '#ef444420' },
+                      ]}>
+                        <Text style={[
+                          styles.levelBadgeText,
+                          EXERCISE_GUIDES[exercise.id].difficulty === 'beginner' && { color: '#22c55e' },
+                          EXERCISE_GUIDES[exercise.id].difficulty === 'intermediate' && { color: '#f59e0b' },
+                          EXERCISE_GUIDES[exercise.id].difficulty === 'advanced' && { color: '#ef4444' },
+                        ]}>
+                          {EXERCISE_GUIDES[exercise.id].difficulty === 'beginner' ? '초급' :
+                           EXERCISE_GUIDES[exercise.id].difficulty === 'intermediate' ? '중급' : '고급'}
+                        </Text>
+                      </RNView>
+                    )}
+                  </RNView>
+                  <Text style={[styles.exerciseDetail, dynamicStyles.textSecondary]}>
+                    {getCategoryName(exercise.category)}
+                    {exercise.equipment && ` • ${getEquipmentName(exercise.equipment)}`}
+                    {exercise.is_custom && ' • ⭐'}
+                  </Text>
+                  {/* 마지막 수행일 & PR 표시 */}
+                  {(lastPerformed || pr) && (
+                    <RNView style={styles.exerciseMeta}>
+                      {lastPerformed && (
+                        <Text style={[styles.exerciseMetaText, dynamicStyles.textTertiary]}>
+                          {formatLastPerformed(lastPerformed)}
+                        </Text>
+                      )}
+                      {pr && (
+                        <Text style={[styles.exerciseMetaText, dynamicStyles.primary]}>
+                          PR {pr.max_weight}kg × {pr.max_reps_at_weight}
+                        </Text>
+                      )}
+                    </RNView>
+                  )}
+                </RNView>
+                {exercise.is_custom && (
+                  <Text style={[styles.moreIcon, dynamicStyles.textTertiary]}>⋯</Text>
+                )}
+              </Pressable>
+            );
+          })
         )}
 
         {filteredExercises.length === 0 && (
@@ -432,6 +517,75 @@ export default function ExercisesScreen() {
                     </RNView>
                   )}
                 </RNView>
+
+                {/* 운동 가이드 (있는 경우만 표시) */}
+                {selectedExercise && EXERCISE_GUIDES[selectedExercise.id] && (
+                  <RNView style={styles.guideSection}>
+                    {/* 난이도 배지 */}
+                    <RNView style={styles.guideDifficultyRow}>
+                      <Text style={[styles.guideLabel, dynamicStyles.textSecondary]}>난이도</Text>
+                      <RNView style={[
+                        styles.difficultyBadge,
+                        EXERCISE_GUIDES[selectedExercise.id].difficulty === 'beginner' && { backgroundColor: '#22c55e20' },
+                        EXERCISE_GUIDES[selectedExercise.id].difficulty === 'intermediate' && { backgroundColor: '#f59e0b20' },
+                        EXERCISE_GUIDES[selectedExercise.id].difficulty === 'advanced' && { backgroundColor: '#ef444420' },
+                      ]}>
+                        <Text style={[
+                          styles.difficultyText,
+                          EXERCISE_GUIDES[selectedExercise.id].difficulty === 'beginner' && { color: '#22c55e' },
+                          EXERCISE_GUIDES[selectedExercise.id].difficulty === 'intermediate' && { color: '#f59e0b' },
+                          EXERCISE_GUIDES[selectedExercise.id].difficulty === 'advanced' && { color: '#ef4444' },
+                        ]}>
+                          {EXERCISE_GUIDES[selectedExercise.id].difficulty === 'beginner' ? '초급' :
+                           EXERCISE_GUIDES[selectedExercise.id].difficulty === 'intermediate' ? '중급' : '고급'}
+                        </Text>
+                      </RNView>
+                    </RNView>
+
+                    {/* 설명 */}
+                    <Text style={[styles.guideDescription, dynamicStyles.text]}>
+                      {EXERCISE_GUIDES[selectedExercise.id].description}
+                    </Text>
+
+                    {/* 타겟 근육 */}
+                    <RNView style={styles.guideTargetRow}>
+                      <Text style={[styles.guideLabel, dynamicStyles.textSecondary]}>타겟 근육</Text>
+                      <Text style={[styles.guideTargetText, dynamicStyles.primary]}>
+                        {EXERCISE_GUIDES[selectedExercise.id].targetMuscles}
+                      </Text>
+                    </RNView>
+
+                    {/* 팁 */}
+                    <RNView style={styles.guideTipsSection}>
+                      <Text style={[styles.guideTipsTitle, dynamicStyles.text]}>💡 수행 팁</Text>
+                      {EXERCISE_GUIDES[selectedExercise.id].tips.slice(0, 3).map((tip, idx) => (
+                        <Text key={idx} style={[styles.guideTipItem, dynamicStyles.textSecondary]}>
+                          • {tip}
+                        </Text>
+                      ))}
+                    </RNView>
+
+                    {/* 흔한 실수 */}
+                    <RNView style={styles.guideMistakesSection}>
+                      <Text style={[styles.guideMistakesTitle, dynamicStyles.text]}>⚠️ 주의할 점</Text>
+                      {EXERCISE_GUIDES[selectedExercise.id].commonMistakes.slice(0, 2).map((mistake, idx) => (
+                        <Text key={idx} style={[styles.guideMistakeItem, dynamicStyles.textTertiary]}>
+                          • {mistake}
+                        </Text>
+                      ))}
+                    </RNView>
+
+                    {/* 홈트 대안 */}
+                    {EXERCISE_GUIDES[selectedExercise.id].homeAlternative && (
+                      <RNView style={[styles.guideHomeAlt, dynamicStyles.cardSecondary]}>
+                        <Text style={[styles.guideHomeAltLabel, dynamicStyles.textSecondary]}>🏠 홈트 대안</Text>
+                        <Text style={[styles.guideHomeAltText, dynamicStyles.text]}>
+                          {EXERCISE_GUIDES[selectedExercise.id].homeAlternative}
+                        </Text>
+                      </RNView>
+                    )}
+                  </RNView>
+                )}
 
                 {/* 커스텀 운동인 경우 수정/삭제 버튼 */}
                 {selectedExercise.is_custom ? (
@@ -700,6 +854,14 @@ const styles = StyleSheet.create({
   exerciseDetail: {
     fontSize: 12,
   },
+  exerciseMeta: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  exerciseMetaText: {
+    fontSize: 11,
+  },
   moreIcon: {
     fontSize: 18,
     paddingHorizontal: 8,
@@ -902,5 +1064,98 @@ const styles = StyleSheet.create({
   helpText: {
     fontSize: 13,
     lineHeight: 20,
+  },
+
+  // 운동 가이드 스타일
+  guideSection: {
+    marginBottom: 16,
+  },
+  guideDifficultyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  guideLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  difficultyBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  difficultyText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  guideDescription: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  guideTargetRow: {
+    marginBottom: 12,
+  },
+  guideTargetText: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 4,
+  },
+  guideTipsSection: {
+    marginBottom: 12,
+  },
+  guideTipsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  guideTipItem: {
+    fontSize: 13,
+    lineHeight: 20,
+    marginLeft: 4,
+    marginBottom: 4,
+  },
+  guideMistakesSection: {
+    marginBottom: 12,
+  },
+  guideMistakesTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  guideMistakeItem: {
+    fontSize: 13,
+    lineHeight: 20,
+    marginLeft: 4,
+    marginBottom: 4,
+  },
+  guideHomeAlt: {
+    padding: 12,
+    borderRadius: 10,
+  },
+  guideHomeAltLabel: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  guideHomeAltText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+
+  // 운동 목록 난이도 배지
+  exerciseNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  levelBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  levelBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
   },
 });

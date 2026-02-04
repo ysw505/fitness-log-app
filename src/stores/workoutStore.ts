@@ -62,7 +62,8 @@ interface WorkoutState {
   lastRestTimerDuration: number; // 마지막으로 설정한 휴식 시간 (초)
 
   startWorkout: (name?: string, profileIds?: string[]) => Promise<void>;
-  finishWorkout: () => Promise<void>;
+  startWorkoutFromTemplate: (templateWorkout: CompletedWorkout) => Promise<void>;
+  finishWorkout: (customName?: string) => Promise<void>;
   cancelWorkout: () => void;
   addExercise: (exercise: Exercise) => Promise<void>;
   removeExercise: (workoutExerciseId: string) => Promise<void>;
@@ -230,7 +231,25 @@ export const useWorkoutStore = create<WorkoutState>()(
         }
       },
 
-      finishWorkout: async () => {
+      startWorkoutFromTemplate: async (templateWorkout) => {
+        const { startWorkout, addExercise } = get();
+
+        // 1. 운동 세션 시작 (같은 이름으로)
+        await startWorkout(templateWorkout.name, templateWorkout.profile_ids);
+
+        // 2. 템플릿의 운동들을 추가 (exerciseStore에서 운동 정보 가져오기)
+        const { useExerciseStore } = await import('./exerciseStore');
+        const allExercises = useExerciseStore.getState().getAllExercises();
+
+        for (const exercise of templateWorkout.exercises) {
+          const exerciseData = allExercises.find((e) => e.id === exercise.exercise_id);
+          if (exerciseData) {
+            await addExercise(exerciseData);
+          }
+        }
+      },
+
+      finishWorkout: async (customName?: string) => {
         const { activeSession, exercises, isOfflineMode, totalRestTimeUsed, isRestTimerRunning, lastRestTimerDuration, restTimerSeconds } = get();
         if (!activeSession) return;
 
@@ -273,7 +292,7 @@ export const useWorkoutStore = create<WorkoutState>()(
 
         const completedWorkout: CompletedWorkout = {
           id: activeSession.id,
-          name: activeSession.name || '운동',
+          name: customName || activeSession.name || '운동',
           started_at: activeSession.started_at,
           finished_at: endTime.toISOString(),
           duration_minutes: durationMinutes,

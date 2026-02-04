@@ -17,6 +17,7 @@ import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-nativ
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Text, useThemeColors } from '@/components/Themed';
+import { TermIcon } from '@/components/TermTooltip';
 import { useWorkoutStore, WorkoutSetWithProfile } from '@/stores/workoutStore';
 import { useHistoryStore, PersonalRecord } from '@/stores/historyStore';
 import { useProfileStore } from '@/stores/profileStore';
@@ -157,7 +158,7 @@ const getTodayRecommendation = (
       message: `무게 +${weightIncrement}kg`,
       subMessage: `${avgReps}회 달성! ${targetRange.min}회부터 다시 시작`,
       type: 'increase_weight',
-      icon: '💪',
+      icon: '📈',
       color: '#22c55e', // green
     };
   } else if (avgReps >= targetRange.min && avgReps < targetRange.max) {
@@ -329,6 +330,8 @@ export default function ActiveWorkoutScreen() {
     borderBg: { backgroundColor: colors.border },
     error: { color: colors.error },
     errorBg: { backgroundColor: 'rgba(239, 68, 68, 0.1)' },
+    warning: { color: colors.warning },
+    warningBorder: { borderColor: colors.warning },
   }), [colors]);
 
   // 휴식 타이머 상태
@@ -340,6 +343,11 @@ export default function ActiveWorkoutScreen() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appState = useRef(AppState.currentState);
 
+  // RPE 입력 상태
+  const [showRpePicker, setShowRpePicker] = useState(false);
+  const [pendingSetId, setPendingSetId] = useState<string | null>(null);
+  const [selectedRpe, setSelectedRpe] = useState<number | null>(null);
+
   // 운동 경과 시간
   const [elapsedTime, setElapsedTime] = useState('00:00');
 
@@ -350,6 +358,10 @@ export default function ActiveWorkoutScreen() {
     name: string;
     name_ko: string | null;
   } | null>(null);
+
+  // 운동 완료 모달 상태
+  const [showFinishModal, setShowFinishModal] = useState(false);
+  const [workoutName, setWorkoutName] = useState('');
 
   // 앱 시작/화면 진입 시 저장된 휴식 타이머 복원
   useEffect(() => {
@@ -416,7 +428,7 @@ export default function ActiveWorkoutScreen() {
       if (Platform.OS !== 'web') {
         Vibration.vibrate([0, 500, 200, 500]);
       }
-      showAlert('휴식 완료!', '다음 세트를 시작하세요 💪');
+      showAlert('휴식 완료!', '다음 세트를 시작하세요');
     }
 
     return () => {
@@ -485,6 +497,46 @@ export default function ActiveWorkoutScreen() {
     setShowRestPicker(false);
   };
 
+  // RPE 선택 핸들러
+  const handleSelectRpe = async (rpe: number | null) => {
+    if (pendingSetId && rpe !== null) {
+      try {
+        await useWorkoutStore.getState().updateSet(pendingSetId, { rpe });
+      } catch (error) {
+        console.error('Failed to update RPE:', error);
+      }
+    }
+    setShowRpePicker(false);
+    setPendingSetId(null);
+    setSelectedRpe(null);
+    // RPE 선택 후 휴식 시간 선택 UI 표시
+    showRestPickerUI();
+  };
+
+  const skipRpe = () => {
+    setShowRpePicker(false);
+    setPendingSetId(null);
+    setSelectedRpe(null);
+    showRestPickerUI();
+  };
+
+  // RPE 색상 (숫자에 따른 그라데이션)
+  const getRpeColor = (rpe: number) => {
+    if (rpe <= 5) return '#22c55e'; // 녹색 - 여유
+    if (rpe <= 6) return '#84cc16'; // 연두
+    if (rpe <= 7) return '#3b82f6'; // 파랑 - 적당
+    if (rpe <= 8) return '#f59e0b'; // 주황
+    if (rpe <= 9) return '#f97316'; // 진한 주황 - 힘듦
+    return '#ef4444'; // 빨강 - 한계
+  };
+
+  const getRpeLabel = (rpe: number) => {
+    if (rpe <= 5) return '여유';
+    if (rpe <= 7) return '적당';
+    if (rpe <= 9) return '힘듦';
+    return '한계';
+  };
+
   // 이전 기록 가져오기 (배열로 반환 - 디로드 판단 등에 사용)
   const getExerciseRecords = (exerciseId: string): ExerciseRecordData[] | null => {
     const history = getExerciseHistory(exerciseId);
@@ -544,17 +596,82 @@ export default function ActiveWorkoutScreen() {
     }));
   };
 
-  const handleFinishWorkout = async () => {
-    showConfirm('운동 완료', '운동을 완료하시겠습니까?', async () => {
-      try {
-        await finishWorkout();
-        // 홈 화면으로 이동 (back 대신 replace 사용하여 확실하게 이동)
-        router.replace('/');
-      } catch (error) {
-        console.error('Failed to finish workout:', error);
-        showAlert('오류', '운동 완료 중 오류가 발생했습니다');
-      }
-    }, '완료');
+  // 운동 내용 기반 스마트 이름 제안
+  const getSuggestedWorkoutName = useCallback(() => {
+    if (exercises.length === 0) {
+      return `운동 ${new Date().toLocaleDateString('ko-KR')}`;
+    }
+
+    // 카테고리별 운동 수 계산
+    const categoryCounts: Record<string, number> = {};
+    const categoryNames: Record<string, string> = {
+      chest: '가슴',
+      back: '등',
+      shoulder: '어깨',
+      arm: '팔',
+      leg: '하체',
+      core: '코어',
+      cardio: '유산소',
+    };
+
+    exercises.forEach((e) => {
+      const category = e.exercise.category;
+      categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+    });
+
+    // 가장 많은 카테고리 찾기
+    const sortedCategories = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]);
+
+    if (sortedCategories.length === 0) {
+      return `운동 ${new Date().toLocaleDateString('ko-KR')}`;
+    }
+
+    const topCategory = sortedCategories[0][0];
+    const topCount = sortedCategories[0][1];
+    const totalExercises = exercises.length;
+
+    // 한 카테고리가 60% 이상이면 그 카테고리 이름 사용
+    if (topCount / totalExercises >= 0.6) {
+      return `${categoryNames[topCategory] || topCategory} 운동`;
+    }
+
+    // 두 가지 주요 카테고리 조합
+    if (sortedCategories.length >= 2) {
+      const cat1 = categoryNames[sortedCategories[0][0]] || sortedCategories[0][0];
+      const cat2 = categoryNames[sortedCategories[1][0]] || sortedCategories[1][0];
+      return `${cat1}/${cat2} 운동`;
+    }
+
+    return `${categoryNames[topCategory] || topCategory} 운동`;
+  }, [exercises]);
+
+  // 완료 모달 열기
+  const handleFinishWorkout = () => {
+    if (exercises.length === 0) {
+      showAlert('운동 추가 필요', '최소 1개의 운동을 추가해주세요.');
+      return;
+    }
+
+    const hasSets = exercises.some((e) => e.sets.length > 0);
+    if (!hasSets) {
+      showAlert('세트 추가 필요', '최소 1개의 세트를 기록해주세요.');
+      return;
+    }
+
+    setWorkoutName(getSuggestedWorkoutName());
+    setShowFinishModal(true);
+  };
+
+  // 실제 완료 처리
+  const confirmFinishWorkout = async () => {
+    try {
+      await finishWorkout(workoutName.trim() || undefined);
+      setShowFinishModal(false);
+      router.replace('/');
+    } catch (error) {
+      console.error('Failed to finish workout:', error);
+      showAlert('오류', '운동 완료 중 오류가 발생했습니다');
+    }
   };
 
   const handleCancelWorkout = () => {
@@ -598,7 +715,7 @@ export default function ActiveWorkoutScreen() {
     const setNumber = (currentExercise?.sets.length || 0) + 1;
 
     try {
-      await addSet(workoutExerciseId, {
+      const newSet = await addSet(workoutExerciseId, {
         set_number: setNumber,
         weight: weightValue, // 0kg allowed (empty = 0)
         reps: repsValue,
@@ -611,8 +728,14 @@ export default function ActiveWorkoutScreen() {
         return newValues;
       });
 
-      // 휴식 시간 선택 UI 표시
-      showRestPickerUI();
+      // RPE 선택 UI 표시 (세트 ID 저장)
+      if (newSet && newSet.id) {
+        setPendingSetId(newSet.id);
+        setShowRpePicker(true);
+      } else {
+        // 세트 ID를 못 가져온 경우 바로 휴식 선택
+        showRestPickerUI();
+      }
     } catch (error) {
       console.error('Failed to add set:', error);
     }
@@ -652,14 +775,6 @@ export default function ActiveWorkoutScreen() {
       showAlert('오류', '이전 기록을 복사하는 중 오류가 발생했습니다');
     }
   };
-
-  if (!activeSession) {
-    return (
-      <RNView style={[styles.container, dynamicStyles.container]}>
-        <Text style={dynamicStyles.text}>진행 중인 운동이 없습니다</Text>
-      </RNView>
-    );
-  }
 
   // 현재 통계 계산
   const totalSets = exercises.reduce((sum, e) => sum + e.sets.length, 0);
@@ -837,12 +952,14 @@ export default function ActiveWorkoutScreen() {
                 )}
                 <Text style={[styles.setHeaderText, dynamicStyles.textTertiary, { flex: 1 }]}>kg</Text>
                 <Text style={[styles.setHeaderText, dynamicStyles.textTertiary, { flex: 1 }]}>횟수</Text>
+                <Text style={[styles.setHeaderText, dynamicStyles.textTertiary, { width: 36 }]}>RPE</Text>
                 <RNView style={{ width: 28 }} />
               </RNView>
 
               {/* 완료된 세트 rows - 녹색 강조 */}
               {exercise.sets.map((set, index) => {
                 const setWithProfile = set as WorkoutSetWithProfile;
+                const setRpeColor = set.rpe ? getRpeColor(set.rpe) : null;
                 return (
                   <RNView
                     key={set.id}
@@ -869,6 +986,14 @@ export default function ActiveWorkoutScreen() {
                     )}
                     <Text style={[styles.completedSetValue, dynamicStyles.textSecondary]}>{set.weight}</Text>
                     <Text style={[styles.completedSetValue, dynamicStyles.textSecondary]}>{set.reps}</Text>
+                    {/* RPE 배지 */}
+                    <RNView style={[styles.setRpeBadge, setRpeColor && { backgroundColor: setRpeColor + '20' }]}>
+                      {set.rpe ? (
+                        <Text style={[styles.setRpeText, { color: setRpeColor }]}>{set.rpe}</Text>
+                      ) : (
+                        <Text style={[styles.setRpeText, dynamicStyles.textTertiary]}>-</Text>
+                      )}
+                    </RNView>
                     <Pressable
                       style={styles.deleteSetButton}
                       onPress={() => handleDeleteSet(set.id)}
@@ -937,7 +1062,7 @@ export default function ActiveWorkoutScreen() {
                 <RNView style={[
                   styles.compactStepper,
                   dynamicStyles.cardSecondary,
-                  inputErrors[exercise.id]?.reps && styles.inputIncomplete,
+                  inputErrors[exercise.id]?.reps && [styles.inputIncomplete, dynamicStyles.warningBorder],
                 ]}>
                   <Pressable
                     style={styles.stepperBtn}
@@ -991,7 +1116,7 @@ export default function ActiveWorkoutScreen() {
                 </RNView>
                 {/* 인라인 힌트 메시지 */}
                 {inputErrors[exercise.id]?.reps && (
-                  <Text style={styles.inputHint}>1회 이상 입력하세요</Text>
+                  <Text style={[styles.inputHint, dynamicStyles.warning]}>1회 이상 입력하세요</Text>
                 )}
               </RNView>
 
@@ -1011,6 +1136,15 @@ export default function ActiveWorkoutScreen() {
       </ScaleDecorator>
     );
   }, [exercises, colors, dynamicStyles, activeProfileIds, currentSetProfileId, currentProfile, targetRepRange, handleAddSet, handleDeleteSet, getExerciseRecords, getTodayRecommendation, getInputValues, updateInputValue, personalRecords]);
+
+  // 진행 중인 운동이 없으면 빈 화면 표시
+  if (!activeSession) {
+    return (
+      <RNView style={[styles.container, dynamicStyles.container]}>
+        <Text style={dynamicStyles.text}>진행 중인 운동이 없습니다</Text>
+      </RNView>
+    );
+  }
 
   return (
     <RNView style={[styles.container, dynamicStyles.container]}>
@@ -1155,12 +1289,89 @@ export default function ActiveWorkoutScreen() {
         />
       </GestureHandlerRootView>
 
+      {/* RPE 선택 (하단 Sheet) */}
+      {showRpePicker && (
+        <>
+          <Pressable style={styles.restSheetOverlay} onPress={skipRpe} />
+          <RNView style={[styles.restSheetContainer, dynamicStyles.card]}>
+            <RNView style={[styles.restSheetHandle, dynamicStyles.borderBg]} />
+            <RNView style={styles.rpeHeaderRow}>
+              <Text style={[styles.restSheetTitle, dynamicStyles.text]}>몇 회 더 할 수 있었나요?</Text>
+              <TermIcon term="rpe" />
+            </RNView>
+            <RNView style={styles.rpeOptionsGrid}>
+              {[
+                { rpe: 6, rir: '4회+', label: '여유' },
+                { rpe: 7, rir: '3회', label: '적당' },
+                { rpe: 8, rir: '2회', label: '적당' },
+                { rpe: 9, rir: '1회', label: '힘듦' },
+                { rpe: 10, rir: '0회', label: '한계' },
+              ].map(({ rpe, rir, label }) => (
+                <Pressable
+                  key={rpe}
+                  style={[
+                    styles.rpeOption,
+                    { backgroundColor: getRpeColor(rpe) + '20', borderColor: getRpeColor(rpe) },
+                    selectedRpe === rpe && { backgroundColor: getRpeColor(rpe) },
+                  ]}
+                  onPress={() => setSelectedRpe(rpe)}
+                >
+                  <Text style={[
+                    styles.rpeOptionRir,
+                    { color: selectedRpe === rpe ? 'rgba(255,255,255,0.85)' : colors.textTertiary },
+                  ]}>
+                    {rir}
+                  </Text>
+                  <Text style={[
+                    styles.rpeOptionNumber,
+                    { color: selectedRpe === rpe ? '#fff' : getRpeColor(rpe) },
+                  ]}>
+                    {rpe}
+                  </Text>
+                  <Text style={[
+                    styles.rpeOptionLabel,
+                    { color: selectedRpe === rpe ? 'rgba(255,255,255,0.9)' : colors.textTertiary },
+                  ]}>
+                    {label}
+                  </Text>
+                </Pressable>
+              ))}
+            </RNView>
+            <Text style={[styles.rpeHelpText, dynamicStyles.textTertiary]}>
+              {selectedRpe
+                ? `RPE ${selectedRpe} 선택됨 · ${selectedRpe === 10 ? '더 이상 못 했음' : `${10 - selectedRpe}회 여유 있었음`}`
+                : '세트 완료 시 남은 여유 횟수를 선택하세요'}
+            </Text>
+            <RNView style={styles.rpeButtonRow}>
+              <Pressable style={styles.rpeSkipBtn} onPress={skipRpe}>
+                <Text style={[styles.rpeSkipBtnText, dynamicStyles.textSecondary]}>건너뛰기</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.rpeConfirmBtn,
+                  selectedRpe ? dynamicStyles.primaryBg : dynamicStyles.cardSecondary,
+                ]}
+                onPress={() => handleSelectRpe(selectedRpe)}
+                disabled={!selectedRpe}
+              >
+                <Text style={[
+                  styles.rpeConfirmBtnText,
+                  !selectedRpe && dynamicStyles.textTertiary
+                ]}>
+                  {selectedRpe ? '저장' : 'RPE 선택'}
+                </Text>
+              </Pressable>
+            </RNView>
+          </RNView>
+        </>
+      )}
+
       {/* 휴식 시간 선택 (하단 Sheet) */}
-      {showRestPicker && !restTimerActive && (
+      {showRestPicker && !restTimerActive && !showRpePicker && (
         <>
           <Pressable style={styles.restSheetOverlay} onPress={skipRest} />
           <RNView style={[styles.restSheetContainer, dynamicStyles.card]}>
-            <RNView style={styles.restSheetHandle} />
+            <RNView style={[styles.restSheetHandle, dynamicStyles.borderBg]} />
             <Text style={[styles.restSheetTitle, dynamicStyles.text]}>휴식 시간</Text>
             <RNView style={styles.restSheetOptions}>
               {[60, 90, 120, 180].map((time) => (
@@ -1220,7 +1431,7 @@ export default function ActiveWorkoutScreen() {
               return (
                 <>
                   {/* 헤더 */}
-                  <RNView style={styles.modalHeader}>
+                  <RNView style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
                     <Text style={[styles.modalTitle, dynamicStyles.text]}>
                       {selectedExerciseForHistory.name_ko || selectedExerciseForHistory.name}
                     </Text>
@@ -1339,7 +1550,7 @@ export default function ActiveWorkoutScreen() {
                     {/* 최고 볼륨 기록 */}
                     {bestVolumeRecord && bestVolumeRecord.total_volume > 0 && (
                       <RNView style={[styles.bestVolumeCard, dynamicStyles.cardSecondary]}>
-                        <Text style={styles.bestVolumeIcon}>💪</Text>
+                        <Text style={styles.bestVolumeIcon}>📊</Text>
                         <RNView style={styles.bestVolumeContent}>
                           <Text style={[styles.bestVolumeLabel, dynamicStyles.textTertiary]}>최고 볼륨</Text>
                           <Text style={[styles.bestVolumeValue, dynamicStyles.text]}>
@@ -1355,6 +1566,61 @@ export default function ActiveWorkoutScreen() {
                 </>
               );
             })()}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* 운동 완료 모달 */}
+      <Modal
+        visible={showFinishModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFinishModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlayCentered}
+          onPress={() => setShowFinishModal(false)}
+        >
+          <Pressable
+            style={[styles.finishModalContent, dynamicStyles.card]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.finishModalIcon}>🏋️</Text>
+            <Text style={[styles.finishModalTitle, dynamicStyles.text]}>운동 완료</Text>
+            <Text style={[styles.finishModalSubtitle, dynamicStyles.textSecondary]}>
+              {exercises.length}개 운동 · {exercises.reduce((sum, e) => sum + e.sets.length, 0)}세트
+            </Text>
+
+            <RNView style={styles.finishNameSection}>
+              <Text style={[styles.finishNameLabel, dynamicStyles.textSecondary]}>운동 이름</Text>
+              <TextInput
+                style={[styles.finishNameInput, dynamicStyles.cardSecondary, dynamicStyles.text, { borderColor: colors.border }]}
+                value={workoutName}
+                onChangeText={setWorkoutName}
+                placeholder="운동 이름 입력"
+                placeholderTextColor={colors.textSecondary}
+                maxLength={30}
+                selectTextOnFocus
+              />
+              <Text style={[styles.finishNameHint, dynamicStyles.textTertiary]}>
+                💡 수정하지 않아도 자동으로 저장됩니다
+              </Text>
+            </RNView>
+
+            <RNView style={styles.finishModalButtons}>
+              <Pressable
+                style={[styles.finishModalCancelBtn, dynamicStyles.cardSecondary]}
+                onPress={() => setShowFinishModal(false)}
+              >
+                <Text style={[styles.finishModalCancelText, dynamicStyles.textSecondary]}>취소</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.finishModalConfirmBtn, dynamicStyles.primaryBg]}
+                onPress={confirmFinishWorkout}
+              >
+                <Text style={styles.finishModalConfirmText}>완료하기</Text>
+              </Pressable>
+            </RNView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1512,7 +1778,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#d1d5db',
     marginBottom: 16,
   },
   restSheetTitle: {
@@ -1803,7 +2068,6 @@ const styles = StyleSheet.create({
   },
   // Subtle incomplete state - amber/orange instead of harsh red
   inputIncomplete: {
-    borderColor: '#f59e0b',
     borderWidth: 2,
   },
   stepperBtn: {
@@ -1825,7 +2089,6 @@ const styles = StyleSheet.create({
   },
   inputHint: {
     fontSize: 11,
-    color: '#f59e0b',
     marginTop: 4,
     textAlign: 'center',
   },
@@ -2024,6 +2287,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
+  modalOverlayCentered: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
   modalContent: {
     maxHeight: '85%',
     borderTopLeftRadius: 20,
@@ -2036,7 +2306,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
   },
   modalTitle: {
     fontSize: 18,
@@ -2241,6 +2510,85 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
+  // RPE 선택 스타일
+  rpeHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  rpeOptionsGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  rpeOption: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 2,
+  },
+  rpeOptionRir: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  rpeOptionNumber: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 1,
+  },
+  rpeOptionLabel: {
+    fontSize: 9,
+    fontWeight: '500',
+  },
+  rpeHelpText: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  rpeButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  rpeSkipBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 12,
+  },
+  rpeSkipBtnText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  rpeConfirmBtn: {
+    flex: 2,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 12,
+  },
+  rpeConfirmBtnDisabled: {
+    opacity: 0.5,
+  },
+  rpeConfirmBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  setRpeBadge: {
+    width: 36,
+    height: 26,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  setRpeText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
   // ===== 완료된 세트 스타일 (녹색 강조) =====
   completedSetRow: {
     flexDirection: 'row',
@@ -2303,5 +2651,78 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+
+  // ===== 운동 완료 모달 스타일 =====
+  finishModalContent: {
+    width: '90%',
+    maxWidth: 340,
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+  },
+  finishModalIcon: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  finishModalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  finishModalSubtitle: {
+    fontSize: 14,
+    marginBottom: 20,
+  },
+  finishNameSection: {
+    width: '100%',
+    marginBottom: 20,
+  },
+  finishNameLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  finishNameInput: {
+    width: '100%',
+    height: 48,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    fontWeight: '500',
+    borderWidth: 1,
+  },
+  finishNameHint: {
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  finishModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  finishModalCancelBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  finishModalCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  finishModalConfirmBtn: {
+    flex: 2,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  finishModalConfirmText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

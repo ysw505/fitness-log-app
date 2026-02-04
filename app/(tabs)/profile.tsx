@@ -4,10 +4,57 @@ import { router } from 'expo-router';
 
 import { Text, View, useThemeColors } from '@/components/Themed';
 import { useAuthStore } from '@/stores/authStore';
-import { useHistoryStore } from '@/stores/historyStore';
+import { useHistoryStore, CompletedWorkout } from '@/stores/historyStore';
 import { useProfileStore, REP_RANGES, RepRangeType } from '@/stores/profileStore';
 import { useBodyCompositionStore, calculateBMI, getBMICategory } from '@/stores/bodyCompositionStore';
 import { FitnessProfile } from '@/types/database.types';
+
+// CSV 생성 함수
+const generateWorkoutCSV = (workouts: CompletedWorkout[]): string => {
+  const headers = ['날짜', '시간', '운동이름', '세트', '무게(kg)', '횟수', 'RPE', '볼륨(kg)'];
+  const rows: string[][] = [];
+
+  workouts.forEach((workout) => {
+    const date = new Date(workout.finished_at);
+    const dateStr = date.toLocaleDateString('ko-KR');
+    const timeStr = date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
+    workout.exercises.forEach((exercise) => {
+      exercise.sets.forEach((set) => {
+        const volume = (set.weight || 0) * (set.reps || 0);
+        rows.push([
+          dateStr,
+          timeStr,
+          exercise.exercise.name_ko || exercise.exercise.name,
+          set.set_number.toString(),
+          (set.weight || 0).toString(),
+          (set.reps || 0).toString(),
+          set.rpe?.toString() || '',
+          volume.toString(),
+        ]);
+      });
+    });
+  });
+
+  // BOM for Excel compatibility
+  const bom = '\uFEFF';
+  const csvContent = [headers.join(','), ...rows.map((row) => row.map((cell) => `"${cell}"`).join(','))].join('\n');
+  return bom + csvContent;
+};
+
+// 웹에서 파일 다운로드
+const downloadCSV = (csv: string, filename: string) => {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
 
 export default function ProfileScreen() {
   const colors = useThemeColors();
@@ -207,6 +254,32 @@ export default function ProfileScreen() {
       alert(message);
     } else {
       Alert.alert('앱 정보', message);
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (completedWorkouts.length === 0) {
+      if (Platform.OS === 'web') {
+        alert('내보낼 운동 기록이 없습니다');
+      } else {
+        Alert.alert('알림', '내보낼 운동 기록이 없습니다');
+      }
+      return;
+    }
+
+    if (Platform.OS === 'web') {
+      const csv = generateWorkoutCSV(completedWorkouts);
+      const filename = `fitness-log-${new Date().toISOString().split('T')[0]}.csv`;
+      downloadCSV(csv, filename);
+      alert(`${completedWorkouts.length}개의 운동 기록이 CSV 파일로 내보내졌습니다`);
+    } else {
+      // 모바일: 클립보드나 공유 기능이 필요 (expo-sharing 설치 필요)
+      // 현재는 웹에서만 지원
+      Alert.alert(
+        '알림',
+        'CSV 내보내기는 현재 웹에서만 지원됩니다.\n\n웹 브라우저에서 앱에 접속하여 내보내기를 진행해주세요.',
+        [{ text: '확인' }]
+      );
     }
   };
 
@@ -448,6 +521,16 @@ export default function ProfileScreen() {
             {isSyncing ? '동기화 중...' : '클라우드에서 복원'}
           </Text>
           <Text style={[styles.menuArrow, dynamicStyles.textTertiary]}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.menuItem, dynamicStyles.border]}
+          onPress={handleExportCSV}
+        >
+          <Text style={[styles.menuText, dynamicStyles.text]}>CSV 내보내기</Text>
+          <Text style={[styles.menuValue, dynamicStyles.textSecondary]}>
+            {completedWorkouts.length}개 기록 ›
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity

@@ -5,6 +5,13 @@ import { Text, useThemeColors } from '@/components/Themed';
 import { useHistoryStore } from '@/stores/historyStore';
 import { EXERCISE_CATEGORIES } from '@/stores/exerciseStore';
 
+// 1RM 추정 공식 (Epley)
+const calculate1RM = (weight: number, reps: number): number => {
+  if (reps === 1) return weight;
+  if (reps === 0 || weight === 0) return 0;
+  return Math.round(weight * (1 + reps / 30));
+};
+
 export default function StatsScreen() {
   const colors = useThemeColors();
   const {
@@ -21,6 +28,8 @@ export default function StatsScreen() {
   } = useHistoryStore();
 
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
+  const [chartPeriod, setChartPeriod] = useState<'1M' | '3M' | 'ALL'>('1M');
+  const [showAllRecords, setShowAllRecords] = useState(false);
 
   const monthlyStats = getMonthlyStats();
   const weeklyStats = getWeeklyStats();
@@ -60,6 +69,55 @@ export default function StatsScreen() {
     ? exerciseRecords[selectedExerciseId]
     : exercisesWithRecords[0];
 
+  // 차트 데이터 계산 (기간별 필터링 + 1RM 추정)
+  const chartData = useMemo(() => {
+    if (!selectedExercise || selectedExercise.records.length === 0) return [];
+
+    const now = new Date();
+    let cutoffDate: Date;
+
+    switch (chartPeriod) {
+      case '1M':
+        cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case '3M':
+        cutoffDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        cutoffDate = new Date(0); // ALL
+    }
+
+    return selectedExercise.records
+      .filter((r) => new Date(r.date) >= cutoffDate)
+      .map((r) => {
+        const avgReps = Math.round(r.total_reps / r.total_sets) || 1;
+        const estimated1RM = calculate1RM(r.max_weight, avgReps);
+        return {
+          date: new Date(r.date),
+          maxWeight: r.max_weight,
+          estimated1RM,
+          volume: r.total_volume,
+          label: new Date(r.date).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' }),
+        };
+      })
+      .reverse(); // 오래된 순으로 정렬
+  }, [selectedExercise, chartPeriod]);
+
+  // 차트 최대/최소값
+  const chartMax = chartData.length > 0 ? Math.max(...chartData.map((d) => d.estimated1RM)) : 0;
+  const chartMin = chartData.length > 0 ? Math.min(...chartData.map((d) => d.estimated1RM)) : 0;
+  const chartRange = chartMax - chartMin || 1;
+
+  // 현재 1RM vs 기간 시작 대비 변화
+  const progressChange = useMemo(() => {
+    if (chartData.length < 2) return null;
+    const first = chartData[0].estimated1RM;
+    const last = chartData[chartData.length - 1].estimated1RM;
+    const diff = last - first;
+    const percent = first > 0 ? Math.round((diff / first) * 100) : 0;
+    return { diff, percent };
+  }, [chartData]);
+
   // 최근 7일 운동 데이터
   const last7DaysData = useMemo(() => {
     const days = [];
@@ -88,8 +146,6 @@ export default function StatsScreen() {
     return days;
   }, [completedWorkouts]);
 
-  const maxVolume = Math.max(...last7DaysData.map((d) => d.volume), 1);
-
   // 이번주 vs 지난주 비교
   const volumeChange = lastWeekStats.totalVolume > 0
     ? Math.round(((weeklyStats.totalVolume - lastWeekStats.totalVolume) / lastWeekStats.totalVolume) * 100)
@@ -98,6 +154,58 @@ export default function StatsScreen() {
   const getCategoryName = (categoryId: string) => {
     const category = EXERCISE_CATEGORIES.find((c) => c.id === categoryId);
     return category?.name || categoryId;
+  };
+
+  // 부위별 회복 상태 계산
+  const recoveryStatus = useMemo(() => {
+    const categoryLastWorkout: Record<string, Date> = {};
+
+    // 각 부위의 마지막 운동 날짜 찾기
+    completedWorkouts.forEach((workout) => {
+      const workoutDate = new Date(workout.finished_at);
+      workout.exercises?.forEach((exercise) => {
+        const category = exercise?.category;
+        if (category && (!categoryLastWorkout[category] || workoutDate > categoryLastWorkout[category])) {
+          categoryLastWorkout[category] = workoutDate;
+        }
+      });
+    });
+
+    // 회복 상태 배열로 변환
+    const now = new Date();
+    const recoveryData = Object.entries(categoryLastWorkout).map(([category, lastDate]) => {
+      const daysSince = Math.floor((now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+      // 회복 상태: 0-1일: 회복 중(빨강), 2-3일: 적정(초록), 4+일: 오버레스트(주황)
+      let status: 'recovering' | 'ready' | 'overrest' = 'ready';
+      if (daysSince <= 1) status = 'recovering';
+      else if (daysSince >= 4) status = 'overrest';
+      return {
+        category,
+        categoryName: getCategoryName(category),
+        daysSince,
+        lastDate,
+        status,
+      };
+    });
+
+    // 최근 운동한 순서로 정렬
+    return recoveryData.sort((a, b) => a.daysSince - b.daysSince);
+  }, [completedWorkouts]);
+
+  const getRecoveryColor = (status: 'recovering' | 'ready' | 'overrest') => {
+    switch (status) {
+      case 'recovering': return colors.error;
+      case 'ready': return colors.success;
+      case 'overrest': return colors.warning;
+    }
+  };
+
+  const getRecoveryLabel = (status: 'recovering' | 'ready' | 'overrest') => {
+    switch (status) {
+      case 'recovering': return '회복 중';
+      case 'ready': return '운동 적기';
+      case 'overrest': return '쉬는 중';
+    }
   };
 
   // 데이터가 없을 때
@@ -129,14 +237,14 @@ export default function StatsScreen() {
 
           {/* 이번 주 운동 */}
           <RNView style={[styles.summaryCard, dynamicStyles.card]}>
-            <Text style={styles.summaryIcon}>💪</Text>
+            <Text style={styles.summaryIcon}>📅</Text>
             <Text style={[styles.summaryValue, dynamicStyles.text]}>{weeklyStats.workoutCount}</Text>
             <Text style={[styles.summaryLabel, dynamicStyles.textSecondary]}>이번 주</Text>
           </RNView>
 
           {/* 전체 운동 */}
           <RNView style={[styles.summaryCard, dynamicStyles.card]}>
-            <Text style={styles.summaryIcon}>🏆</Text>
+            <Text style={[styles.summaryIcon, { fontWeight: '700' }]}>Σ</Text>
             <Text style={[styles.summaryValue, dynamicStyles.text]}>{totalWorkouts}</Text>
             <Text style={[styles.summaryLabel, dynamicStyles.textSecondary]}>전체</Text>
           </RNView>
@@ -149,64 +257,99 @@ export default function StatsScreen() {
           </RNView>
         </RNView>
 
-        {/* 주간 운동 현황 */}
-        <RNView style={styles.section}>
-          <RNView style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, dynamicStyles.text]}>주간 운동 현황</Text>
-            {volumeChange !== 0 && (
-              <RNView style={[
-                styles.changeBadge,
-                volumeChange > 0 ? { backgroundColor: colors.success + '20' } : { backgroundColor: colors.error + '20' }
-              ]}>
-                <Text style={[
-                  styles.changeBadgeText,
-                  volumeChange > 0 ? dynamicStyles.success : dynamicStyles.error
-                ]}>
-                  {volumeChange > 0 ? '↑' : '↓'} {Math.abs(volumeChange)}%
-                </Text>
-              </RNView>
-            )}
-          </RNView>
-
-          <RNView style={[styles.weeklyChart, dynamicStyles.card]}>
-            <RNView style={styles.chartBars}>
-              {last7DaysData.map((day, index) => (
-                <RNView key={index} style={styles.barColumn}>
-                  <Text style={[styles.barValue, dynamicStyles.textSecondary]}>
-                    {day.volume > 0 ? (day.volume >= 1000 ? `${Math.round(day.volume / 1000)}k` : day.volume) : ''}
-                  </Text>
-                  <RNView style={[styles.barWrapper, dynamicStyles.cardSecondary]}>
-                    <RNView
-                      style={[
-                        styles.bar,
-                        {
-                          height: maxVolume > 0 ? `${(day.volume / maxVolume) * 100}%` : 0,
-                          backgroundColor: day.isToday ? colors.primary : colors.success,
-                        },
-                      ]}
-                    />
+        {/* 부위별 회복 상태 */}
+        {recoveryStatus.length > 0 && (
+          <RNView style={styles.section}>
+            <Text style={[styles.sectionTitle, dynamicStyles.text]}>회복 상태</Text>
+            <RNView style={[styles.recoveryGrid, dynamicStyles.card]}>
+              {recoveryStatus.slice(0, 6).map((item) => (
+                <RNView key={item.category} style={styles.recoveryItem}>
+                  <RNView style={[styles.recoveryIndicator, { backgroundColor: getRecoveryColor(item.status) + '20' }]}>
+                    <RNView style={[styles.recoveryDot, { backgroundColor: getRecoveryColor(item.status) }]} />
                   </RNView>
-                  <Text style={[
-                    styles.barLabel,
-                    day.isToday ? dynamicStyles.primary : dynamicStyles.textTertiary,
-                    day.isToday && { fontWeight: '700' }
-                  ]}>
-                    {day.label}
-                  </Text>
-                  {day.count > 0 && (
-                    <RNView style={[styles.workoutDot, day.isToday ? dynamicStyles.primaryBg : dynamicStyles.successBg]} />
-                  )}
+                  <RNView style={styles.recoveryInfo}>
+                    <Text style={[styles.recoveryCategory, dynamicStyles.text]}>{item.categoryName}</Text>
+                    <Text style={[styles.recoveryDays, { color: getRecoveryColor(item.status) }]}>
+                      {item.daysSince === 0 ? '오늘' : `${item.daysSince}일 전`}
+                    </Text>
+                  </RNView>
+                  <RNView style={[styles.recoveryStatusBadge, { backgroundColor: getRecoveryColor(item.status) + '15' }]}>
+                    <Text style={[styles.recoveryStatusText, { color: getRecoveryColor(item.status) }]}>
+                      {getRecoveryLabel(item.status)}
+                    </Text>
+                  </RNView>
                 </RNView>
               ))}
             </RNView>
-
-            {/* 범례 */}
-            <RNView style={[styles.chartLegend, { borderTopColor: colors.border }]}>
-              <Text style={[styles.legendText, dynamicStyles.textSecondary]}>
-                이번 주: {weeklyStats.workoutCount}회 운동, {(weeklyStats.totalVolume / 1000).toFixed(1)}톤 볼륨
-              </Text>
+            <RNView style={[styles.recoveryLegend, dynamicStyles.cardSecondary]}>
+              <RNView style={styles.recoveryLegendItem}>
+                <RNView style={[styles.recoveryLegendDot, { backgroundColor: colors.error }]} />
+                <Text style={[styles.recoveryLegendText, dynamicStyles.textTertiary]}>0-1일: 회복 중</Text>
+              </RNView>
+              <RNView style={styles.recoveryLegendItem}>
+                <RNView style={[styles.recoveryLegendDot, { backgroundColor: colors.success }]} />
+                <Text style={[styles.recoveryLegendText, dynamicStyles.textTertiary]}>2-3일: 운동 적기</Text>
+              </RNView>
+              <RNView style={styles.recoveryLegendItem}>
+                <RNView style={[styles.recoveryLegendDot, { backgroundColor: colors.warning }]} />
+                <Text style={[styles.recoveryLegendText, dynamicStyles.textTertiary]}>4일+: 쉬는 중</Text>
+              </RNView>
             </RNView>
           </RNView>
+        )}
+
+        {/* 이번 주 운동 */}
+        <RNView style={[styles.weeklyCompact, dynamicStyles.card]}>
+          <RNView style={styles.weeklyCompactHeader}>
+            <Text style={[styles.weeklyCompactTitle, dynamicStyles.text]}>이번 주</Text>
+            <RNView style={styles.weeklyCompactStats}>
+              <Text style={[styles.weeklyCompactValue, dynamicStyles.primary]}>
+                {weeklyStats.workoutCount}회
+              </Text>
+              {weeklyStats.totalVolume > 0 && (
+                <Text style={[styles.weeklyCompactVolume, dynamicStyles.textSecondary]}>
+                  · {(weeklyStats.totalVolume / 1000).toFixed(1)}톤
+                </Text>
+              )}
+            </RNView>
+          </RNView>
+
+          {/* 요일별 운동 여부 - 심플한 dot 형태 */}
+          <RNView style={styles.weeklyDots}>
+            {last7DaysData.map((day, index) => (
+              <RNView key={index} style={styles.weeklyDotColumn}>
+                <RNView
+                  style={[
+                    styles.weeklyDotIndicator,
+                    day.count > 0
+                      ? (day.isToday ? dynamicStyles.primaryBg : { backgroundColor: colors.success })
+                      : dynamicStyles.cardSecondary,
+                  ]}
+                >
+                  {day.count > 0 && <Text style={styles.weeklyDotCheck}>✓</Text>}
+                </RNView>
+                <Text style={[
+                  styles.weeklyDotLabel,
+                  day.isToday ? dynamicStyles.primary : dynamicStyles.textTertiary,
+                  day.isToday && { fontWeight: '700' }
+                ]}>
+                  {day.label}
+                </Text>
+              </RNView>
+            ))}
+          </RNView>
+
+          {/* 지난주 대비 변화 */}
+          {volumeChange !== 0 && (
+            <RNView style={[styles.weeklyCompactChange, { borderTopColor: colors.border }]}>
+              <Text style={[styles.weeklyCompactChangeText, dynamicStyles.textSecondary]}>
+                지난주 대비{' '}
+                <Text style={volumeChange > 0 ? dynamicStyles.success : dynamicStyles.error}>
+                  {volumeChange > 0 ? '↑' : '↓'} {Math.abs(volumeChange)}%
+                </Text>
+              </Text>
+            </RNView>
+          )}
         </RNView>
 
         {/* 많이 한 부위 */}
@@ -328,6 +471,102 @@ export default function StatsScreen() {
                   </RNView>
                 </RNView>
 
+                {/* 1RM 추정 + 진행 차트 */}
+                {chartData.length > 0 && (
+                  <RNView style={styles.chartSection}>
+                    {/* 현재 1RM 표시 */}
+                    <RNView style={styles.current1RM}>
+                      <RNView>
+                        <Text style={[styles.current1RMLabel, dynamicStyles.textSecondary]}>추정 1RM</Text>
+                        <Text style={[styles.current1RMValue, dynamicStyles.primary]}>
+                          {chartData[chartData.length - 1]?.estimated1RM || 0}kg
+                        </Text>
+                      </RNView>
+                      {progressChange && progressChange.diff !== 0 && (
+                        <RNView style={[
+                          styles.progressBadge,
+                          { backgroundColor: progressChange.diff > 0 ? colors.success + '20' : colors.error + '20' }
+                        ]}>
+                          <Text style={[
+                            styles.progressBadgeText,
+                            { color: progressChange.diff > 0 ? colors.success : colors.error }
+                          ]}>
+                            {progressChange.diff > 0 ? '↑' : '↓'} {Math.abs(progressChange.diff)}kg ({Math.abs(progressChange.percent)}%)
+                          </Text>
+                        </RNView>
+                      )}
+                    </RNView>
+
+                    {/* 기간 필터 */}
+                    <RNView style={styles.periodFilters}>
+                      {(['1M', '3M', 'ALL'] as const).map((period) => (
+                        <Pressable
+                          key={period}
+                          style={[
+                            styles.periodButton,
+                            chartPeriod === period ? dynamicStyles.primaryBg : dynamicStyles.cardSecondary,
+                          ]}
+                          onPress={() => setChartPeriod(period)}
+                        >
+                          <Text style={[
+                            styles.periodButtonText,
+                            chartPeriod === period ? { color: '#fff' } : dynamicStyles.textSecondary,
+                          ]}>
+                            {period === 'ALL' ? '전체' : period.replace('M', '개월')}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </RNView>
+
+                    {/* 라인 차트 */}
+                    {chartData.length >= 2 ? (
+                      <RNView style={styles.lineChart}>
+                        <RNView style={styles.chartYAxis}>
+                          <Text style={[styles.chartYLabel, dynamicStyles.textTertiary]}>{chartMax}</Text>
+                          <Text style={[styles.chartYLabel, dynamicStyles.textTertiary]}>{chartMin}</Text>
+                        </RNView>
+                        <RNView style={styles.chartArea}>
+                          {/* 차트 라인 (점들 연결) */}
+                          <RNView style={styles.chartLine}>
+                            {chartData.map((point, idx) => {
+                              const x = (idx / (chartData.length - 1)) * 100;
+                              const y = ((chartMax - point.estimated1RM) / chartRange) * 100;
+                              return (
+                                <RNView
+                                  key={idx}
+                                  style={[
+                                    styles.chartDot,
+                                    dynamicStyles.primaryBg,
+                                    {
+                                      left: `${x}%`,
+                                      top: `${y}%`,
+                                    },
+                                  ]}
+                                />
+                              );
+                            })}
+                          </RNView>
+                          {/* X축 라벨 */}
+                          <RNView style={styles.chartXAxis}>
+                            <Text style={[styles.chartXLabel, dynamicStyles.textTertiary]}>
+                              {chartData[0]?.label}
+                            </Text>
+                            <Text style={[styles.chartXLabel, dynamicStyles.textTertiary]}>
+                              {chartData[chartData.length - 1]?.label}
+                            </Text>
+                          </RNView>
+                        </RNView>
+                      </RNView>
+                    ) : (
+                      <RNView style={[styles.chartPlaceholder, dynamicStyles.cardSecondary]}>
+                        <Text style={[styles.chartPlaceholderText, dynamicStyles.textSecondary]}>
+                          기록이 2회 이상이면 차트가 표시됩니다
+                        </Text>
+                      </RNView>
+                    )}
+                  </RNView>
+                )}
+
                 {/* 운동 통계 */}
                 <RNView style={[styles.exerciseStats, dynamicStyles.cardSecondary]}>
                   <RNView style={styles.exerciseStat}>
@@ -350,25 +589,41 @@ export default function StatsScreen() {
                   </RNView>
                 </RNView>
 
-                {/* 최근 기록 목록 */}
+                {/* 최근 기록 목록 (Best Set 방식) */}
                 <RNView style={styles.recentRecords}>
-                  <Text style={[styles.recentRecordsTitle, dynamicStyles.textSecondary]}>최근 기록</Text>
-                  {selectedExercise.records.slice(0, 5).map((record, idx) => (
-                    <RNView key={idx} style={[styles.recordItem, { borderBottomColor: colors.border }]}>
-                      <Text style={[styles.recordDate, dynamicStyles.textSecondary]}>
-                        {new Date(record.date).toLocaleDateString('ko-KR', {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </Text>
-                      <Text style={[styles.recordWeight, dynamicStyles.text]}>
-                        {record.max_weight}kg × {Math.round(record.total_reps / record.total_sets)}회
-                      </Text>
-                      <Text style={[styles.recordVolume, dynamicStyles.textTertiary]}>
-                        {record.total_volume.toLocaleString()}kg
-                      </Text>
-                    </RNView>
-                  ))}
+                  <Pressable
+                    style={styles.recentRecordsHeader}
+                    onPress={() => setShowAllRecords(!showAllRecords)}
+                  >
+                    <Text style={[styles.recentRecordsTitle, dynamicStyles.textSecondary]}>세션별 Best Set</Text>
+                    <Text style={[styles.recentRecordsToggle, dynamicStyles.primary]}>
+                      {showAllRecords ? '접기 ▲' : '더보기 ▼'}
+                    </Text>
+                  </Pressable>
+                  {selectedExercise.records.slice(0, showAllRecords ? 10 : 3).map((record, idx) => {
+                    const avgReps = Math.round(record.total_reps / record.total_sets) || 1;
+                    const est1RM = calculate1RM(record.max_weight, avgReps);
+                    const isPR = idx === 0 && est1RM >= chartMax;
+                    return (
+                      <RNView key={idx} style={[styles.recordItem, { borderBottomColor: colors.border }]}>
+                        <Text style={[styles.recordDate, dynamicStyles.textSecondary]}>
+                          {new Date(record.date).toLocaleDateString('ko-KR', {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </Text>
+                        <RNView style={styles.recordMain}>
+                          <Text style={[styles.recordWeight, dynamicStyles.text]}>
+                            {record.max_weight}kg × {avgReps}회
+                          </Text>
+                          {isPR && <Text style={styles.prBadge}>🔥PR</Text>}
+                        </RNView>
+                        <Text style={[styles.record1RM, dynamicStyles.textTertiary]}>
+                          1RM: {est1RM}kg
+                        </Text>
+                      </RNView>
+                    );
+                  })}
                 </RNView>
               </RNView>
             )}
@@ -466,61 +721,65 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // 주간 차트
-  weeklyChart: {
+  // 이번 주 운동 (컴팩트)
+  weeklyCompact: {
     borderRadius: 16,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    marginBottom: 24,
   },
-  chartBars: {
+  weeklyCompactHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    height: 150,
-    paddingTop: 20,
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  barColumn: {
-    flex: 1,
+  weeklyCompactTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  weeklyCompactStats: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  barValue: {
-    fontSize: 10,
-    marginBottom: 4,
-    height: 14,
+  weeklyCompactValue: {
+    fontSize: 18,
+    fontWeight: '700',
   },
-  barWrapper: {
-    width: '60%',
-    height: 100,
-    justifyContent: 'flex-end',
-    borderRadius: 6,
-    overflow: 'hidden',
+  weeklyCompactVolume: {
+    fontSize: 14,
+    marginLeft: 4,
   },
-  bar: {
-    width: '100%',
-    borderRadius: 6,
-    minHeight: 4,
+  weeklyDots: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
-  barLabel: {
+  weeklyDotColumn: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  weeklyDotIndicator: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  weeklyDotCheck: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  weeklyDotLabel: {
     fontSize: 12,
-    marginTop: 8,
   },
-  workoutDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginTop: 4,
-  },
-  chartLegend: {
-    marginTop: 16,
+  weeklyCompactChange: {
+    marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
     alignItems: 'center',
   },
-  legendText: {
+  weeklyCompactChangeText: {
     fontSize: 13,
   },
 
@@ -636,6 +895,98 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+
+  // 차트 섹션
+  chartSection: {
+    marginBottom: 16,
+  },
+  current1RM: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  current1RMLabel: {
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  current1RMValue: {
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  progressBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  progressBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  periodFilters: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  periodButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  periodButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  lineChart: {
+    flexDirection: 'row',
+    height: 100,
+    marginBottom: 8,
+  },
+  chartYAxis: {
+    width: 35,
+    justifyContent: 'space-between',
+    paddingRight: 8,
+  },
+  chartYLabel: {
+    fontSize: 10,
+    textAlign: 'right',
+  },
+  chartArea: {
+    flex: 1,
+    position: 'relative',
+  },
+  chartLine: {
+    flex: 1,
+    position: 'relative',
+    borderLeftWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#e5e5e5',
+  },
+  chartDot: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: -4,
+    marginTop: -4,
+  },
+  chartXAxis: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  chartXLabel: {
+    fontSize: 10,
+  },
+  chartPlaceholder: {
+    height: 80,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chartPlaceholderText: {
+    fontSize: 13,
+  },
   exerciseDetailHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -677,10 +1028,19 @@ const styles = StyleSheet.create({
   recentRecords: {
     paddingTop: 8,
   },
+  recentRecordsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   recentRecordsTitle: {
     fontSize: 14,
     fontWeight: '600',
-    marginBottom: 12,
+  },
+  recentRecordsToggle: {
+    fontSize: 13,
+    fontWeight: '500',
   },
   recordItem: {
     flexDirection: 'row',
@@ -691,14 +1051,94 @@ const styles = StyleSheet.create({
   },
   recordDate: {
     fontSize: 13,
-    width: 60,
+    width: 55,
+  },
+  recordMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   recordWeight: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  prBadge: {
+    fontSize: 11,
+  },
+  record1RM: {
+    fontSize: 12,
+    width: 70,
+    textAlign: 'right',
+  },
+
+  // 회복 상태
+  recoveryGrid: {
+    borderRadius: 16,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  recoveryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    gap: 12,
+  },
+  recoveryIndicator: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recoveryDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  recoveryInfo: {
     flex: 1,
   },
-  recordVolume: {
+  recoveryCategory: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  recoveryDays: {
     fontSize: 13,
+    fontWeight: '500',
+  },
+  recoveryStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  recoveryStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  recoveryLegend: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    borderRadius: 10,
+    marginTop: 10,
+    padding: 10,
+  },
+  recoveryLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  recoveryLegendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  recoveryLegendText: {
+    fontSize: 11,
   },
 });

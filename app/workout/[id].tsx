@@ -1,4 +1,5 @@
-import { StyleSheet, ScrollView, Pressable, Alert, Platform } from 'react-native';
+import { useMemo } from 'react';
+import { StyleSheet, ScrollView, Pressable, Alert, Platform, View as RNView } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 
 import { Text, View, useThemeColors } from '@/components/Themed';
@@ -13,6 +14,36 @@ export default function WorkoutDetailScreen() {
   const colors = useThemeColors();
 
   const workout = getWorkoutById(id);
+
+  // 다이나믹 스타일 (다크 테마 지원)
+  const dynamicStyles = useMemo(() => ({
+    container: { backgroundColor: colors.background },
+    title: { color: colors.text },
+    date: { color: colors.textSecondary },
+    time: { color: colors.textTertiary },
+    summaryCard: { backgroundColor: colors.primary },
+    sectionTitle: { color: colors.text },
+    exerciseCard: { backgroundColor: colors.card },
+    exerciseNumber: { color: colors.textTertiary },
+    exerciseName: { color: colors.text },
+    categoryBadge: { backgroundColor: colors.primaryLight },
+    categoryBadgeText: { color: colors.primary },
+    exerciseVolume: { color: colors.success },
+    setsList: { backgroundColor: colors.cardSecondary },
+    setsHeaderBorder: { borderBottomColor: colors.border },
+    setHeaderText: { color: colors.textTertiary },
+    setNumber: { color: colors.textSecondary },
+    setCellText: { color: colors.textSecondary },
+    warmupRow: { backgroundColor: colors.warning + '30' },
+    dropsetRow: { backgroundColor: colors.error + '20' },
+    profileSummaryTitle: { color: colors.textSecondary },
+    templateButton: { backgroundColor: colors.primaryLight },
+    templateButtonText: { color: colors.primary },
+    deleteButton: { backgroundColor: colors.error + '15' },
+    deleteButtonText: { color: colors.error },
+    notFoundText: { color: colors.textSecondary },
+    backButton: { backgroundColor: colors.primary },
+  }), [colors]);
 
   // 멀티 프로필 운동인지 확인
   const isMultiProfile = workout?.profile_ids && workout.profile_ids.length > 1;
@@ -45,11 +76,11 @@ export default function WorkoutDetailScreen() {
 
   if (!workout) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, dynamicStyles.container]}>
         <View style={styles.notFound}>
           <Text style={styles.notFoundIcon}>🔍</Text>
-          <Text style={styles.notFoundText}>운동 기록을 찾을 수 없습니다</Text>
-          <Pressable style={styles.backButton} onPress={() => router.back()}>
+          <Text style={[styles.notFoundText, dynamicStyles.notFoundText]}>운동 기록을 찾을 수 없습니다</Text>
+          <Pressable style={[styles.backButton, dynamicStyles.backButton]} onPress={() => router.back()}>
             <Text style={styles.backButtonText}>돌아가기</Text>
           </Pressable>
         </View>
@@ -82,13 +113,22 @@ export default function WorkoutDetailScreen() {
 
   const getRpeLabel = (rpe: number | null) => {
     if (rpe === null) return null;
-    const labels: Record<number, { emoji: string; label: string; color: string }> = {
-      5: { emoji: '😊', label: '쉬움', color: '#22c55e' },
-      7: { emoji: '💪', label: '적당', color: '#3b82f6' },
-      9: { emoji: '🔥', label: '힘듦', color: '#f59e0b' },
-      10: { emoji: '😵', label: '한계', color: '#ef4444' },
+    // RPE 색상 (숫자 기반 그라데이션)
+    const getColor = (value: number) => {
+      if (value <= 5) return '#22c55e'; // 녹색 - 여유
+      if (value <= 6) return '#84cc16'; // 연두
+      if (value <= 7) return '#3b82f6'; // 파랑 - 적당
+      if (value <= 8) return '#f59e0b'; // 주황
+      if (value <= 9) return '#f97316'; // 진한 주황 - 힘듦
+      return '#ef4444'; // 빨강 - 한계
     };
-    return labels[rpe] || null;
+    const getLabel = (value: number) => {
+      if (value <= 5) return '여유';
+      if (value <= 7) return '적당';
+      if (value <= 9) return '힘듦';
+      return '한계';
+    };
+    return { label: getLabel(rpe), color: getColor(rpe) };
   };
 
   const handleDelete = () => {
@@ -117,19 +157,19 @@ export default function WorkoutDetailScreen() {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
+    <ScrollView style={[styles.container, dynamicStyles.container]}>
+      <RNView style={styles.content}>
         {/* 헤더 */}
-        <View style={styles.header}>
-          <Text style={styles.title}>{workout.name}</Text>
-          <Text style={styles.date}>{formatDate(workout.started_at)}</Text>
-          <Text style={styles.time}>
+        <RNView style={styles.header}>
+          <Text style={[styles.title, dynamicStyles.title]}>{workout.name}</Text>
+          <Text style={[styles.date, dynamicStyles.date]}>{formatDate(workout.started_at)}</Text>
+          <Text style={[styles.time, dynamicStyles.time]}>
             {formatTime(workout.started_at)} - {formatTime(workout.finished_at)}
           </Text>
-        </View>
+        </RNView>
 
         {/* 요약 통계 */}
-        <View style={styles.summaryCard}>
+        <RNView style={[styles.summaryCard, dynamicStyles.summaryCard]}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>{workout.duration_minutes}</Text>
             <Text style={styles.summaryLabel}>분</Text>
@@ -151,7 +191,7 @@ export default function WorkoutDetailScreen() {
             </Text>
             <Text style={styles.summaryLabel}>kg</Text>
           </View>
-        </View>
+        </RNView>
 
         {/* 프로필별 통계 (멀티 프로필 운동인 경우) */}
         {isMultiProfile && (() => {
@@ -171,27 +211,27 @@ export default function WorkoutDetailScreen() {
           });
 
           return (
-            <View style={styles.profileSummaryContainer}>
-              <Text style={styles.profileSummaryTitle}>프로필별 기록</Text>
-              <View style={styles.profileSummaryCards}>
+            <RNView style={styles.profileSummaryContainer}>
+              <Text style={[styles.profileSummaryTitle, dynamicStyles.profileSummaryTitle]}>프로필별 기록</Text>
+              <RNView style={styles.profileSummaryCards}>
                 {Object.entries(profileStats).map(([profileId, stats]) => (
-                  <View key={profileId} style={[styles.profileSummaryCard, { backgroundColor: colors.primaryLight }]}>
-                    <View style={[styles.profileAvatarSmall, { backgroundColor: colors.primary }]}>
+                  <RNView key={profileId} style={[styles.profileSummaryCard, { backgroundColor: colors.primaryLight }]}>
+                    <RNView style={[styles.profileAvatarSmall, { backgroundColor: colors.primary }]}>
                       <Text style={styles.profileAvatarText}>{stats.name.charAt(0)}</Text>
-                    </View>
+                    </RNView>
                     <Text style={[styles.profileSummaryName, { color: colors.text }]}>{stats.name}</Text>
                     <Text style={[styles.profileSummaryStat, { color: colors.primary }]}>
                       {stats.sets}세트 · {stats.volume.toLocaleString()}kg
                     </Text>
-                  </View>
+                  </RNView>
                 ))}
-              </View>
-            </View>
+              </RNView>
+            </RNView>
           );
         })()}
 
         {/* 운동 목록 */}
-        <Text style={styles.sectionTitle}>운동 기록</Text>
+        <Text style={[styles.sectionTitle, dynamicStyles.sectionTitle]}>운동 기록</Text>
 
         {workout.exercises.map((exercise, exerciseIdx) => {
           const exerciseVolume = exercise.sets.reduce(
@@ -200,39 +240,39 @@ export default function WorkoutDetailScreen() {
           );
 
           return (
-            <View key={exercise.id} style={styles.exerciseCard}>
+            <RNView key={exercise.id} style={[styles.exerciseCard, dynamicStyles.exerciseCard]}>
               {/* 운동 헤더 */}
-              <View style={styles.exerciseHeader}>
-                <View style={styles.exerciseInfo}>
-                  <Text style={styles.exerciseNumber}>#{exerciseIdx + 1}</Text>
-                  <View style={styles.exerciseNameContainer}>
-                    <Text style={styles.exerciseName}>
+              <RNView style={styles.exerciseHeader}>
+                <RNView style={styles.exerciseInfo}>
+                  <Text style={[styles.exerciseNumber, dynamicStyles.exerciseNumber]}>#{exerciseIdx + 1}</Text>
+                  <RNView style={styles.exerciseNameContainer}>
+                    <Text style={[styles.exerciseName, dynamicStyles.exerciseName]}>
                       {exercise.exercise_name_ko || exercise.exercise_name}
                     </Text>
-                    <View style={styles.categoryBadge}>
-                      <Text style={styles.categoryBadgeText}>
+                    <RNView style={[styles.categoryBadge, dynamicStyles.categoryBadge]}>
+                      <Text style={[styles.categoryBadgeText, dynamicStyles.categoryBadgeText]}>
                         {getCategoryName(exercise.category)}
                       </Text>
-                    </View>
-                  </View>
-                </View>
-                <Text style={styles.exerciseVolume}>
+                    </RNView>
+                  </RNView>
+                </RNView>
+                <Text style={[styles.exerciseVolume, dynamicStyles.exerciseVolume]}>
                   {exerciseVolume.toLocaleString()}kg
                 </Text>
-              </View>
+              </RNView>
 
               {/* 세트 목록 */}
-              <View style={styles.setsList}>
-                <View style={styles.setsHeader}>
-                  <Text style={[styles.setHeaderText, { flex: 0.5 }]}>세트</Text>
+              <RNView style={[styles.setsList, dynamicStyles.setsList]}>
+                <RNView style={[styles.setsHeader, dynamicStyles.setsHeaderBorder]}>
+                  <Text style={[styles.setHeaderText, dynamicStyles.setHeaderText, { flex: 0.5 }]}>세트</Text>
                   {isMultiProfile && (
-                    <Text style={[styles.setHeaderText, { flex: 0.6 }]}>누구</Text>
+                    <Text style={[styles.setHeaderText, dynamicStyles.setHeaderText, { flex: 0.6 }]}>누구</Text>
                   )}
-                  <Text style={[styles.setHeaderText, { flex: 1 }]}>무게</Text>
-                  <Text style={[styles.setHeaderText, { flex: 1 }]}>횟수</Text>
-                  <Text style={[styles.setHeaderText, { flex: 1 }]}>볼륨</Text>
-                  <Text style={[styles.setHeaderText, { flex: 0.7 }]}>RPE</Text>
-                </View>
+                  <Text style={[styles.setHeaderText, dynamicStyles.setHeaderText, { flex: 1 }]}>무게</Text>
+                  <Text style={[styles.setHeaderText, dynamicStyles.setHeaderText, { flex: 1 }]}>횟수</Text>
+                  <Text style={[styles.setHeaderText, dynamicStyles.setHeaderText, { flex: 1 }]}>볼륨</Text>
+                  <Text style={[styles.setHeaderText, dynamicStyles.setHeaderText, { flex: 0.7 }]}>RPE</Text>
+                </RNView>
 
                 {exercise.sets.map((set, setIdx) => {
                   const rpeInfo = getRpeLabel(set.rpe);
@@ -240,75 +280,75 @@ export default function WorkoutDetailScreen() {
                   const setWithProfile = set as WorkoutSetWithProfile;
 
                   return (
-                    <View
+                    <RNView
                       key={set.id}
                       style={[
                         styles.setRow,
-                        set.is_warmup && styles.warmupRow,
-                        set.is_dropset && styles.dropsetRow,
+                        set.is_warmup && dynamicStyles.warmupRow,
+                        set.is_dropset && dynamicStyles.dropsetRow,
                       ]}
                     >
-                      <View style={[styles.setCell, { flex: 0.5 }]}>
-                        <Text style={styles.setNumber}>{setIdx + 1}</Text>
+                      <RNView style={[styles.setCell, { flex: 0.5 }]}>
+                        <Text style={[styles.setNumber, dynamicStyles.setNumber]}>{setIdx + 1}</Text>
                         {set.is_warmup && (
-                          <Text style={styles.setBadge}>W</Text>
+                          <Text style={[styles.setBadge, { color: colors.warning }]}>W</Text>
                         )}
                         {set.is_dropset && (
-                          <Text style={[styles.setBadge, styles.dropBadge]}>D</Text>
+                          <Text style={[styles.setBadge, { color: colors.error }]}>D</Text>
                         )}
-                      </View>
+                      </RNView>
                       {isMultiProfile && (
-                        <View style={[styles.setCell, { flex: 0.6 }]}>
-                          <View style={[styles.profileBadgeSmall, { backgroundColor: colors.primary + '20' }]}>
+                        <RNView style={[styles.setCell, { flex: 0.6 }]}>
+                          <RNView style={[styles.profileBadgeSmall, { backgroundColor: colors.primary + '20' }]}>
                             <Text style={[styles.profileBadgeText, { color: colors.primary }]}>
                               {setWithProfile.profile_name?.charAt(0) || '?'}
                             </Text>
-                          </View>
-                        </View>
+                          </RNView>
+                        </RNView>
                       )}
-                      <Text style={[styles.setCellText, { flex: 1 }]}>
+                      <Text style={[styles.setCellText, dynamicStyles.setCellText, { flex: 1 }]}>
                         {set.weight || '-'}kg
                       </Text>
-                      <Text style={[styles.setCellText, { flex: 1 }]}>
+                      <Text style={[styles.setCellText, dynamicStyles.setCellText, { flex: 1 }]}>
                         {set.reps || '-'}회
                       </Text>
-                      <Text style={[styles.setCellText, { flex: 1 }]}>
+                      <Text style={[styles.setCellText, dynamicStyles.setCellText, { flex: 1 }]}>
                         {setVolume > 0 ? setVolume.toLocaleString() : '-'}
                       </Text>
-                      <View style={[styles.setCell, { flex: 0.7 }]}>
+                      <RNView style={[styles.setCell, { flex: 0.7 }]}>
                         {rpeInfo ? (
-                          <View
+                          <RNView
                             style={[
                               styles.rpeBadge,
                               { backgroundColor: rpeInfo.color + '20' },
                             ]}
                           >
-                            <Text style={{ fontSize: 12 }}>{rpeInfo.emoji}</Text>
-                          </View>
+                            <Text style={{ fontSize: 11, fontWeight: '700', color: rpeInfo.color }}>{set.rpe}</Text>
+                          </RNView>
                         ) : (
-                          <Text style={styles.setCellText}>-</Text>
+                          <Text style={[styles.setCellText, dynamicStyles.setCellText]}>-</Text>
                         )}
-                      </View>
-                    </View>
+                      </RNView>
+                    </RNView>
                   );
                 })}
-              </View>
-            </View>
+              </RNView>
+            </RNView>
           );
         })}
 
         {/* 템플릿 저장 버튼 */}
-        <Pressable style={styles.templateButton} onPress={handleSaveAsTemplate}>
-          <Text style={styles.templateButtonText}>템플릿으로 저장</Text>
+        <Pressable style={[styles.templateButton, dynamicStyles.templateButton]} onPress={handleSaveAsTemplate}>
+          <Text style={[styles.templateButtonText, dynamicStyles.templateButtonText]}>템플릿으로 저장</Text>
         </Pressable>
 
         {/* 삭제 버튼 */}
-        <Pressable style={styles.deleteButton} onPress={handleDelete}>
-          <Text style={styles.deleteButtonText}>기록 삭제</Text>
+        <Pressable style={[styles.deleteButton, dynamicStyles.deleteButton]} onPress={handleDelete}>
+          <Text style={[styles.deleteButtonText, dynamicStyles.deleteButtonText]}>기록 삭제</Text>
         </Pressable>
 
-        <View style={{ height: 40 }} />
-      </View>
+        <RNView style={{ height: 40 }} />
+      </RNView>
     </ScrollView>
   );
 }
@@ -327,20 +367,16 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     marginBottom: 8,
-    color: '#1f2937',
   },
   date: {
     fontSize: 16,
-    color: '#374151',
     marginBottom: 4,
   },
   time: {
     fontSize: 14,
-    color: '#6b7280',
   },
   summaryCard: {
     flexDirection: 'row',
-    backgroundColor: '#3b82f6',
     borderRadius: 16,
     padding: 20,
     marginBottom: 24,
@@ -368,10 +404,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 16,
-    color: '#1f2937',
   },
   exerciseCard: {
-    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
@@ -397,7 +431,6 @@ const styles = StyleSheet.create({
   exerciseNumber: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#9ca3af',
     marginRight: 12,
     marginTop: 2,
   },
@@ -408,28 +441,23 @@ const styles = StyleSheet.create({
   exerciseName: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#1f2937',
     marginBottom: 6,
   },
   categoryBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#eff6ff',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
   },
   categoryBadgeText: {
     fontSize: 11,
-    color: '#3b82f6',
     fontWeight: '500',
   },
   exerciseVolume: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#10b981',
   },
   setsList: {
-    backgroundColor: '#f9fafb',
     borderRadius: 12,
     padding: 12,
   },
@@ -437,14 +465,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
     marginBottom: 8,
     backgroundColor: 'transparent',
   },
   setHeaderText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6b7280',
     textAlign: 'center',
   },
   setRow: {
@@ -454,13 +480,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   warmupRow: {
-    backgroundColor: '#fef3c7',
     marginHorizontal: -12,
     paddingHorizontal: 12,
     borderRadius: 8,
   },
   dropsetRow: {
-    backgroundColor: '#fce7f3',
     marginHorizontal: -12,
     paddingHorizontal: 12,
     borderRadius: 8,
@@ -474,20 +498,16 @@ const styles = StyleSheet.create({
   setNumber: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
   },
   setBadge: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#f59e0b',
     marginLeft: 4,
   },
   dropBadge: {
-    color: '#ec4899',
   },
   setCellText: {
     fontSize: 14,
-    color: '#374151',
     textAlign: 'center',
   },
   rpeBadge: {
@@ -515,7 +535,6 @@ const styles = StyleSheet.create({
   profileSummaryTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
     marginBottom: 12,
   },
   profileSummaryCards: {
@@ -554,26 +573,22 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   templateButton: {
-    backgroundColor: '#eff6ff',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 24,
   },
   templateButtonText: {
-    color: '#3b82f6',
     fontSize: 16,
     fontWeight: '600',
   },
   deleteButton: {
-    backgroundColor: '#fee2e2',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 12,
   },
   deleteButtonText: {
-    color: '#ef4444',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -589,11 +604,9 @@ const styles = StyleSheet.create({
   },
   notFoundText: {
     fontSize: 16,
-    color: '#6b7280',
     marginBottom: 24,
   },
   backButton: {
-    backgroundColor: '#3b82f6',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,

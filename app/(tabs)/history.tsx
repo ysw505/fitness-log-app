@@ -6,6 +6,7 @@ import { Text, useThemeColors } from '@/components/Themed';
 import { useHistoryStore, CompletedWorkout, PersonalRecord, WorkoutSetWithProfile } from '@/stores/historyStore';
 import { EXERCISE_CATEGORIES } from '@/stores/exerciseStore';
 import { useProfileStore } from '@/stores/profileStore';
+import { useWorkoutStore } from '@/stores/workoutStore';
 import WorkoutCalendar from '@/components/WorkoutCalendar';
 import { ProfileSwitcher } from '@/components/ProfileSwitcher';
 
@@ -17,16 +18,11 @@ export default function HistoryScreen() {
     completedWorkouts,
     deleteWorkout,
     getWeeklyStats,
-    getMonthlyStats,
     getAllPersonalRecords,
     getWorkoutStreak,
     getTotalWorkoutCount,
-    getAverageWorkoutDuration,
-    getCategoryStats,
     getLastWeekStats,
     getWeeklyVolumeTrend,
-    getMostPerformedExercises,
-    getRecentPRs,
     getMonthlyWorkoutDays,
     getWeeklyCategorySets,
   } = useHistoryStore();
@@ -36,17 +32,29 @@ export default function HistoryScreen() {
   const { profiles, currentProfileId } = useProfileStore();
   const currentProfile = profiles.find((p) => p.id === currentProfileId);
 
+  const { activeSession, startWorkoutFromTemplate } = useWorkoutStore();
+
+  // 다시하기 기능
+  const handleRepeatWorkout = async (workout: CompletedWorkout) => {
+    if (activeSession) {
+      if (Platform.OS === 'web') {
+        alert('진행 중인 운동이 있습니다. 먼저 완료해주세요.');
+      } else {
+        Alert.alert('알림', '진행 중인 운동이 있습니다. 먼저 완료해주세요.');
+      }
+      return;
+    }
+
+    await startWorkoutFromTemplate(workout);
+    router.push('/workout/active');
+  };
+
   const weeklyStats = getWeeklyStats();
   const lastWeekStats = getLastWeekStats();
-  const monthlyStats = getMonthlyStats();
   const personalRecords = getAllPersonalRecords();
   const streak = getWorkoutStreak();
   const totalWorkouts = getTotalWorkoutCount();
-  const avgDuration = getAverageWorkoutDuration();
-  const categoryStats = getCategoryStats();
   const volumeTrend = getWeeklyVolumeTrend();
-  const mostPerformed = getMostPerformedExercises();
-  const recentPRs = getRecentPRs();
   const monthlyDays = getMonthlyWorkoutDays();
   const weeklyCategorySets = getWeeklyCategorySets();
 
@@ -86,6 +94,14 @@ export default function HistoryScreen() {
   const getCategoryName = (categoryId: string) => {
     const category = EXERCISE_CATEGORIES.find((c) => c.id === categoryId);
     return category?.name || categoryId;
+  };
+
+  // 볼륨 포맷팅 (0k 문제 해결)
+  const formatVolume = (volume: number) => {
+    if (volume === 0) return '-';
+    if (volume < 1000) return `${Math.round(volume)}kg`;
+    if (volume < 10000) return `${(volume / 1000).toFixed(1)}k kg`;
+    return `${Math.round(volume / 1000)}k kg`;
   };
 
   const handleDeleteWorkout = (workout: CompletedWorkout) => {
@@ -303,9 +319,18 @@ export default function HistoryScreen() {
                 </RNView>
               )}
 
-              <Text style={[styles.exerciseCount, dynamicStyles.textSecondary]}>
-                {workout.exercises.length}개 운동 · {workout.total_sets}세트
-              </Text>
+              <RNView style={styles.workoutCardFooter}>
+                <Text style={[styles.exerciseCount, dynamicStyles.textSecondary]}>
+                  {workout.exercises.length}개 운동 · {workout.total_sets}세트
+                </Text>
+                <Pressable
+                  style={[styles.repeatButton, dynamicStyles.primaryLightBg]}
+                  onPress={() => handleRepeatWorkout(workout)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={[styles.repeatButtonText, dynamicStyles.primary]}>다시하기</Text>
+                </Pressable>
+              </RNView>
             </Pressable>
           );
         })}
@@ -319,11 +344,17 @@ export default function HistoryScreen() {
     <RNView style={styles.tabContent}>
       {personalRecords.length === 0 ? (
         <RNView style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>🏋️</Text>
-          <Text style={[styles.emptyText, dynamicStyles.text]}>아직 기록이 없습니다</Text>
+          <Text style={styles.emptyIcon}>🎯</Text>
+          <Text style={[styles.emptyText, dynamicStyles.text]}>첫 번째 기록을 세워보세요!</Text>
           <Text style={[styles.emptySubtext, dynamicStyles.textSecondary]}>
-            운동을 시작하면 개인 기록이 자동으로 저장됩니다
+            운동을 하면 자동으로 최고 기록이 저장돼요
           </Text>
+          <Pressable
+            style={[styles.emptyActionButton, dynamicStyles.primaryBg]}
+            onPress={() => router.push('/')}
+          >
+            <Text style={styles.emptyActionButtonText}>운동 시작하기</Text>
+          </Pressable>
         </RNView>
       ) : (
         <FlatList
@@ -368,7 +399,7 @@ export default function HistoryScreen() {
           <RNView style={styles.comparisonItem}>
             <Text style={[styles.comparisonLabel, dynamicStyles.textSecondary]}>총 볼륨</Text>
             <Text style={[styles.comparisonMainValue, dynamicStyles.text]}>
-              {Math.round(weeklyStats.totalVolume / 1000)}k kg
+              {formatVolume(weeklyStats.totalVolume)}
             </Text>
             <Text style={[
               styles.comparisonChange,
@@ -402,7 +433,7 @@ export default function HistoryScreen() {
             return (
               <RNView key={index} style={styles.volumeBarContainer}>
                 <Text style={[styles.volumeValue, dynamicStyles.textSecondary]}>
-                  {week.volume > 0 ? `${Math.round(week.volume / 1000)}k` : '-'}
+                  {week.volume > 0 ? (week.volume < 1000 ? `${Math.round(week.volume)}` : `${Math.round(week.volume / 1000)}k`) : '-'}
                 </Text>
                 <RNView style={styles.volumeBarWrapper}>
                   <RNView
@@ -429,7 +460,7 @@ export default function HistoryScreen() {
       <RNView style={[styles.categorySection, dynamicStyles.card]}>
         <Text style={[styles.sectionTitle, dynamicStyles.text]}>이번 주 부위별 세트</Text>
         {Object.keys(weeklyCategorySets).length === 0 ? (
-          <Text style={[styles.noData, dynamicStyles.textSecondary]}>이번 주 운동 기록이 없습니다</Text>
+          <Text style={[styles.noData, dynamicStyles.textSecondary]}>이번 주 첫 운동을 시작해보세요</Text>
         ) : (
           Object.entries(weeklyCategorySets)
             .sort(([, a], [, b]) => b - a)
@@ -461,40 +492,7 @@ export default function HistoryScreen() {
         )}
       </RNView>
 
-      {/* 최근 PR */}
-      {recentPRs.length > 0 && (
-        <RNView style={[styles.recentPRSection, dynamicStyles.card]}>
-          <Text style={[styles.sectionTitle, dynamicStyles.text]}>🏆 최근 30일 PR</Text>
-          {recentPRs.slice(0, 3).map((pr) => (
-            <RNView key={pr.exercise_id} style={styles.recentPRItem}>
-              <Text style={[styles.recentPRName, dynamicStyles.text]}>
-                {pr.exercise_name_ko || pr.exercise_name}
-              </Text>
-              <Text style={[styles.recentPRValue, dynamicStyles.primary]}>
-                {pr.max_weight}kg × {pr.max_reps_at_weight}회
-              </Text>
-            </RNView>
-          ))}
-        </RNView>
-      )}
 
-      {/* 자주 하는 운동 */}
-      {mostPerformed.length > 0 && (
-        <RNView style={[styles.mostPerformedSection, dynamicStyles.card]}>
-          <Text style={[styles.sectionTitle, dynamicStyles.text]}>자주 하는 운동 TOP 5</Text>
-          {mostPerformed.map((exercise, index) => (
-            <RNView key={exercise.exerciseId} style={styles.mostPerformedItem}>
-              <Text style={[styles.mostPerformedRank, dynamicStyles.primary]}>#{index + 1}</Text>
-              <Text style={[styles.mostPerformedName, dynamicStyles.text]} numberOfLines={1}>
-                {exercise.name}
-              </Text>
-              <Text style={[styles.mostPerformedCount, dynamicStyles.textSecondary]}>
-                {exercise.count}회
-              </Text>
-            </RNView>
-          ))}
-        </RNView>
-      )}
 
       {/* 전체 요약 */}
       <RNView style={[styles.totalSummary, dynamicStyles.primaryBg]}>
@@ -509,12 +507,8 @@ export default function HistoryScreen() {
             <Text style={styles.totalSummaryLabel}>이번 달 운동일</Text>
           </RNView>
           <RNView style={styles.totalSummaryItem}>
-            <Text style={styles.totalSummaryValue}>{streak > 0 ? `🔥${streak}` : '0'}</Text>
+            <Text style={styles.totalSummaryValue}>{streak > 0 ? `🔥${streak}` : '-'}</Text>
             <Text style={styles.totalSummaryLabel}>연속 일수</Text>
-          </RNView>
-          <RNView style={styles.totalSummaryItem}>
-            <Text style={styles.totalSummaryValue}>{avgDuration}</Text>
-            <Text style={styles.totalSummaryLabel}>평균 시간(분)</Text>
           </RNView>
         </RNView>
       </RNView>
@@ -628,6 +622,20 @@ const styles = StyleSheet.create({
   },
   exerciseCount: {
     fontSize: 13,
+  },
+  workoutCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  repeatButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  repeatButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 
   // Profile Stats in workout card
@@ -784,53 +792,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
 
-  // Recent PR Section
-  recentPRSection: {
-    marginHorizontal: 16,
-    marginBottom: 8,
-    padding: 16,
-    borderRadius: 16,
-  },
-  recentPRItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  recentPRName: {
-    fontSize: 14,
-    flex: 1,
-  },
-  recentPRValue: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  // Most Performed
-  mostPerformedSection: {
-    marginHorizontal: 16,
-    marginBottom: 8,
-    padding: 16,
-    borderRadius: 16,
-  },
-  mostPerformedItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  mostPerformedRank: {
-    fontSize: 14,
-    fontWeight: '700',
-    width: 30,
-  },
-  mostPerformedName: {
-    fontSize: 14,
-    flex: 1,
-  },
-  mostPerformedCount: {
-    fontSize: 13,
-  },
-
   // Total Summary
   totalSummary: {
     marginHorizontal: 16,
@@ -911,5 +872,16 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     textAlign: 'center',
+  },
+  emptyActionButton: {
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  emptyActionButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

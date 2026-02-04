@@ -6,6 +6,7 @@ import { makeRedirectUri } from 'expo-auth-session';
 import { supabase } from '@/services/supabase';
 import { Profile } from '@/types/database.types';
 import { useHistoryStore } from './historyStore';
+import { useProfileStore } from './profileStore';
 
 interface AuthState {
   session: Session | null;
@@ -55,7 +56,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signInWithGoogle: async () => {
-    if (Platform.OS === 'web') {
+    // 웹 환경 체크 (typeof window 사용하여 더 정확하게 판단)
+    const isWeb = Platform.OS === 'web' || (typeof window !== 'undefined' && typeof document !== 'undefined' && !('ReactNativeWebView' in window));
+
+    console.log('Platform.OS:', Platform.OS, 'isWeb:', isWeb);
+
+    if (isWeb) {
       // 웹에서는 간단히 OAuth 리다이렉트
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -66,12 +72,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (error) throw error;
     } else {
       // 네이티브에서는 expo-web-browser 사용
-      // EAS 빌드에서는 native scheme 사용
       const redirectUri = makeRedirectUri({
         scheme: 'fitnesslogtemp',
         path: 'auth/callback',
-        // native: 앱 스키마로 리다이렉트
-        native: 'fitnesslogtemp://auth/callback',
       });
 
       console.log('Redirect URI:', redirectUri);
@@ -122,6 +125,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
     set({ session: null, user: null, profile: null });
+    // 프로필도 클리어
+    useProfileStore.getState().clearProfiles();
   },
 
   fetchProfile: async () => {
@@ -135,6 +140,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .single();
 
     if (error) {
+      // 프로필이 없으면 자동 생성 (DB 초기화 후 재로그인 케이스)
+      if (error.code === 'PGRST116') {
+        console.log('Profile not found, creating new profile...');
+        const newProfile = {
+          id: user.id,
+          display_name: user.user_metadata?.full_name || user.email?.split('@')[0] || '사용자',
+          avatar_url: user.user_metadata?.avatar_url || null,
+          unit_system: 'metric' as const,
+        };
+
+        const { data: createdProfile, error: createError } = await supabase
+          .from('profiles')
+          .upsert(newProfile)
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Error creating profile:', createError);
+          return;
+        }
+
+        console.log('Profile created successfully');
+        set({ profile: createdProfile });
+        return;
+      }
+
       console.error('Error fetching profile:', error);
       return;
     }
@@ -152,8 +183,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // 프로필 가져오기 및 동기화
     if (session?.user) {
       await get().fetchProfile();
+      // 피트니스 프로필 가져오기
+      await useProfileStore.getState().fetchProfiles(session.user.id);
       // 앱 시작 시 클라우드에서 운동 기록 동기화
       useHistoryStore.getState().syncFromCloud(session.user.id);
+    } else {
+      // 로그인 안된 경우 로컬 프로필 초기화
+      useProfileStore.getState().initLocalProfiles();
     }
 
     // 인증 상태 변경 리스너 설정
@@ -162,10 +198,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (event === 'SIGNED_IN' && session?.user) {
         await get().fetchProfile();
+        // 피트니스 프로필 가져오기
+        await useProfileStore.getState().fetchProfiles(session.user.id);
         // 로그인 시 클라우드에서 운동 기록 동기화
         useHistoryStore.getState().syncFromCloud(session.user.id);
       } else if (event === 'SIGNED_OUT') {
         set({ profile: null });
+        useProfileStore.getState().clearProfiles();
+        // 로그아웃 후 로컬 프로필 초기화
+        useProfileStore.getState().initLocalProfiles();
       }
     });
 

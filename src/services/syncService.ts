@@ -1,5 +1,41 @@
 import { supabase } from './supabase';
 import { CompletedWorkout, CompletedExercise } from '@/stores/historyStore';
+import { DEFAULT_EXERCISES } from '@/data/defaultExercises';
+
+// 운동 데이터가 Supabase에 존재하는지 확인하고 없으면 추가
+const ensureExercisesExist = async (exercises: CompletedExercise[]): Promise<void> => {
+  const exerciseIds = [...new Set(exercises.map((e) => e.exercise_id))];
+
+  for (const exerciseId of exerciseIds) {
+    // 기본 운동인 경우 (default_로 시작)
+    if (exerciseId.startsWith('default_')) {
+      const defaultExercise = DEFAULT_EXERCISES.find((e) => e.id === exerciseId);
+      if (defaultExercise) {
+        try {
+          // upsert로 이미 있으면 무시, 없으면 추가
+          const { error } = await supabase
+            .from('exercises')
+            .upsert({
+              id: defaultExercise.id,
+              name: defaultExercise.name,
+              name_ko: defaultExercise.name_ko,
+              category: defaultExercise.category,
+              muscle_group: defaultExercise.muscle_group,
+              equipment: defaultExercise.equipment,
+              is_custom: false,
+              user_id: null,
+            }, { onConflict: 'id' });
+
+          if (error) {
+            console.error(`Failed to ensure exercise ${exerciseId}:`, error);
+          }
+        } catch (e) {
+          console.error(`Error ensuring exercise ${exerciseId}:`, e);
+        }
+      }
+    }
+  }
+};
 
 // 운동 기록을 Supabase에 저장
 export const saveWorkoutToCloud = async (
@@ -7,6 +43,9 @@ export const saveWorkoutToCloud = async (
   workout: CompletedWorkout
 ): Promise<boolean> => {
   try {
+    // 0. 운동 데이터가 Supabase에 존재하는지 먼저 확인
+    await ensureExercisesExist(workout.exercises);
+
     // 1. workout_sessions 저장
     const { data: session, error: sessionError } = await supabase
       .from('workout_sessions')
@@ -219,21 +258,29 @@ export const deleteWorkoutFromCloud = async (
   }
 };
 
-// 로컬과 클라우드 데이터 병합 (클라우드 우선, 로컬에만 있는 것 추가)
+// 로컬과 클라우드 데이터 병합 (더 완전한 데이터 우선)
 export const mergeWorkouts = (
   localWorkouts: CompletedWorkout[],
   cloudWorkouts: CompletedWorkout[]
 ): CompletedWorkout[] => {
   const workoutMap = new Map<string, CompletedWorkout>();
 
-  // 클라우드 데이터 먼저 추가 (우선순위)
-  cloudWorkouts.forEach((w) => workoutMap.set(w.id, w));
+  // 로컬 데이터 먼저 추가
+  localWorkouts.forEach((w) => workoutMap.set(w.id, w));
 
-  // 로컬에만 있는 데이터 추가
-  localWorkouts.forEach((w) => {
-    if (!workoutMap.has(w.id)) {
+  // 클라우드 데이터 - 더 많은 세트가 있거나 같은 경우에만 덮어씀
+  // 이렇게 하면 클라우드 저장이 완료되기 전에 sync가 실행되어도
+  // 로컬의 완전한 데이터가 유지됨
+  cloudWorkouts.forEach((w) => {
+    const existing = workoutMap.get(w.id);
+    if (!existing) {
+      // 로컬에 없으면 클라우드 데이터 추가
+      workoutMap.set(w.id, w);
+    } else if (w.total_sets >= existing.total_sets) {
+      // 클라우드가 더 많거나 같은 세트를 가지면 클라우드 데이터 사용
       workoutMap.set(w.id, w);
     }
+    // 클라우드 세트가 더 적으면 로컬 데이터 유지
   });
 
   // 날짜 순으로 정렬

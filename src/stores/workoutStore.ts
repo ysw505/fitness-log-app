@@ -12,6 +12,14 @@ import {
 } from '@/types/database.types';
 import { WorkoutExerciseWithSets, SetInput } from '@/types/workout.types';
 import { useHistoryStore, CompletedWorkout, CompletedExercise } from './historyStore';
+import { useProfileStore } from './profileStore';
+import { useAchievementStore } from './achievementStore';
+
+// 프로필 ID가 포함된 세트 타입
+export interface WorkoutSetWithProfile extends WorkoutSet {
+  profile_id?: string;
+  profile_name?: string;
+}
 
 // 웹/네이티브 호환 스토리지
 const getStorage = (): StateStorage => {
@@ -42,21 +50,33 @@ interface WorkoutState {
   currentExerciseIndex: number;
   restTimerSeconds: number;
   isRestTimerRunning: boolean;
+  restTimerEndTime: number | null; // 타이머 종료 시각 timestamp (persist용)
   isOfflineMode: boolean;
 
-  startWorkout: (name?: string) => Promise<void>;
+  // 같이 운동하는 프로필들
+  activeProfileIds: string[];
+  currentSetProfileId: string | null; // 현재 세트를 기록할 프로필
+
+  // 시간 추적
+  totalRestTimeUsed: number; // 총 사용된 휴식 시간 (초)
+  lastRestTimerDuration: number; // 마지막으로 설정한 휴식 시간 (초)
+
+  startWorkout: (name?: string, profileIds?: string[]) => Promise<void>;
   finishWorkout: () => Promise<void>;
   cancelWorkout: () => void;
   addExercise: (exercise: Exercise) => Promise<void>;
   removeExercise: (workoutExerciseId: string) => Promise<void>;
   reorderExercises: (fromIndex: number, toIndex: number) => void;
-  addSet: (workoutExerciseId: string, setData: SetInput) => Promise<WorkoutSet | null>;
+  addSet: (workoutExerciseId: string, setData: SetInput) => Promise<WorkoutSetWithProfile | null>;
   updateSet: (setId: string, setData: Partial<SetInput>) => Promise<void>;
   removeSet: (setId: string) => Promise<void>;
   setCurrentExerciseIndex: (index: number) => void;
+  setCurrentSetProfile: (profileId: string) => void;
   startRestTimer: (seconds: number) => void;
   stopRestTimer: () => void;
   tickRestTimer: () => void;
+  restoreRestTimer: () => void; // 앱 시작시 restTimerEndTime에서 남은 시간 복원
+  getTimeBreakdown: () => { totalSeconds: number; restSeconds: number; activeSeconds: number };
 }
 
 export const useWorkoutStore = create<WorkoutState>()(
@@ -67,10 +87,19 @@ export const useWorkoutStore = create<WorkoutState>()(
       currentExerciseIndex: 0,
       restTimerSeconds: 0,
       isRestTimerRunning: false,
+      restTimerEndTime: null,
       isOfflineMode: false,
+      activeProfileIds: [],
+      currentSetProfileId: null,
+      totalRestTimeUsed: 0,
+      lastRestTimerDuration: 0,
 
-      startWorkout: async (name) => {
+      startWorkout: async (name, profileIds) => {
         const { data: { user } } = await supabase.auth.getUser();
+
+        // 같이 운동할 프로필들 설정 (없으면 현재 프로필만)
+        const currentProfileId = useProfileStore.getState().currentProfileId;
+        const workoutProfileIds = profileIds || (currentProfileId ? [currentProfileId] : []);
 
         const sessionName = name || `운동 ${new Date().toLocaleDateString('ko-KR')}`;
         const startedAt = new Date().toISOString();
@@ -93,6 +122,10 @@ export const useWorkoutStore = create<WorkoutState>()(
             exercises: [],
             currentExerciseIndex: 0,
             isOfflineMode: true,
+            activeProfileIds: workoutProfileIds,
+            currentSetProfileId: workoutProfileIds[0] || null,
+            totalRestTimeUsed: 0,
+            lastRestTimerDuration: 0,
           });
           return;
         }
@@ -104,24 +137,101 @@ export const useWorkoutStore = create<WorkoutState>()(
           started_at: startedAt,
         };
 
-        const { data, error } = await supabase
-          .from('workout_sessions')
-          .insert(insertData)
-          .select()
-          .single();
+        try {
+          const { data, error } = await supabase
+            .from('workout_sessions')
+            .insert(insertData)
+            .select()
+            .single();
 
-        if (error) throw error;
+          if (error) {
+            // 외래 키 오류 (DB가 초기화되었지만 세션이 남아있는 경우) - 프로필 생성 후 재시도
+            if (error.code === '23503' || error.message?.includes('foreign key')) {
+              console.warn('User not found in DB, creating profile...');
 
-        set({
-          activeSession: data,
-          exercises: [],
-          currentExerciseIndex: 0,
-          isOfflineMode: false,
-        });
+              // 프로필 자동 생성
+              const newProfile = {
+                id: user.id,
+                display_name: user.user_metadata?.full_name || user.email?.split('@')[0] || '사용자',
+                avatar_url: user.user_metadata?.avatar_url || null,
+                unit_system: 'metric' as const,
+              };
+
+              const { error: profileError } = await supabase
+                .from('profiles')
+                .upsert(newProfile);
+
+              if (profileError) {
+                console.error('Failed to create profile:', profileError);
+                throw profileError;
+              }
+
+              console.log('Profile created, retrying workout session...');
+
+              // 프로필 생성 후 재시도
+              const { data: retryData, error: retryError } = await supabase
+                .from('workout_sessions')
+                .insert(insertData)
+                .select()
+                .single();
+
+              if (retryError) throw retryError;
+
+              set({
+                activeSession: retryData,
+                exercises: [],
+                currentExerciseIndex: 0,
+                isOfflineMode: false,
+                activeProfileIds: workoutProfileIds,
+                currentSetProfileId: workoutProfileIds[0] || null,
+                totalRestTimeUsed: 0,
+                lastRestTimerDuration: 0,
+              });
+              return;
+            }
+            throw error;
+          }
+
+          set({
+            activeSession: data,
+            exercises: [],
+            currentExerciseIndex: 0,
+            isOfflineMode: false,
+            activeProfileIds: workoutProfileIds,
+            currentSetProfileId: workoutProfileIds[0] || null,
+            totalRestTimeUsed: 0,
+            lastRestTimerDuration: 0,
+          });
+        } catch (err) {
+          // 네트워크 오류 등 다른 오류 - 로컬 모드로 폴백
+          console.warn('Failed to create session in Supabase, falling back to local mode:', err);
+
+          const localSession: WorkoutSession = {
+            id: generateLocalId(),
+            user_id: 'local',
+            name: sessionName,
+            started_at: startedAt,
+            finished_at: null,
+            duration_minutes: null,
+            notes: null,
+            created_at: startedAt,
+          };
+
+          set({
+            activeSession: localSession,
+            exercises: [],
+            currentExerciseIndex: 0,
+            isOfflineMode: true,
+            activeProfileIds: workoutProfileIds,
+            currentSetProfileId: workoutProfileIds[0] || null,
+            totalRestTimeUsed: 0,
+            lastRestTimerDuration: 0,
+          });
+        }
       },
 
       finishWorkout: async () => {
-        const { activeSession, exercises, isOfflineMode } = get();
+        const { activeSession, exercises, isOfflineMode, totalRestTimeUsed, isRestTimerRunning, lastRestTimerDuration, restTimerSeconds } = get();
         if (!activeSession) return;
 
         const { data: { user } } = await supabase.auth.getUser();
@@ -131,6 +241,7 @@ export const useWorkoutStore = create<WorkoutState>()(
         const durationMinutes = Math.round(
           (endTime.getTime() - startTime.getTime()) / 1000 / 60
         );
+        const totalSeconds = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
 
         // 완료된 운동 데이터 생성
         const completedExercises: CompletedExercise[] = exercises.map((e) => ({
@@ -150,6 +261,16 @@ export const useWorkoutStore = create<WorkoutState>()(
           0
         );
 
+        // 현재 운동에 참여한 프로필 IDs
+        const { activeProfileIds } = get();
+
+        // 시간 분석 계산 - 진행 중인 휴식 타이머도 포함
+        let finalRestSeconds = totalRestTimeUsed;
+        if (isRestTimerRunning && lastRestTimerDuration > 0) {
+          finalRestSeconds += lastRestTimerDuration - restTimerSeconds;
+        }
+        const activeSeconds = Math.max(0, totalSeconds - finalRestSeconds);
+
         const completedWorkout: CompletedWorkout = {
           id: activeSession.id,
           name: activeSession.name || '운동',
@@ -159,10 +280,19 @@ export const useWorkoutStore = create<WorkoutState>()(
           exercises: completedExercises,
           total_sets: totalSets,
           total_volume: totalVolume,
+          profile_ids: activeProfileIds.length > 0 ? activeProfileIds : undefined,
+          rest_seconds: finalRestSeconds,
+          active_seconds: activeSeconds,
         };
 
         // 히스토리에 저장 (로그인된 경우 userId 전달하여 클라우드에도 저장)
         useHistoryStore.getState().addCompletedWorkout(completedWorkout, user?.id);
+
+        // 성취 시스템에 운동 기록 (배지, 스트릭 등 업데이트)
+        const exerciseIds = exercises.map(e => e.exercise_id);
+        const prCount = Object.keys(useHistoryStore.getState().personalRecords).length;
+        useAchievementStore.getState().recordWorkout(totalVolume, exerciseIds, false);
+        useAchievementStore.getState().updatePRCount(prCount);
 
         // 로컬 모드가 아니면 Supabase에도 저장
         if (!isOfflineMode) {
@@ -185,6 +315,13 @@ export const useWorkoutStore = create<WorkoutState>()(
           exercises: [],
           currentExerciseIndex: 0,
           isOfflineMode: false,
+          activeProfileIds: [],
+          currentSetProfileId: null,
+          restTimerSeconds: 0,
+          isRestTimerRunning: false,
+          restTimerEndTime: null,
+          totalRestTimeUsed: 0,
+          lastRestTimerDuration: 0,
         });
       },
 
@@ -194,6 +331,13 @@ export const useWorkoutStore = create<WorkoutState>()(
           exercises: [],
           currentExerciseIndex: 0,
           isOfflineMode: false,
+          activeProfileIds: [],
+          currentSetProfileId: null,
+          restTimerSeconds: 0,
+          isRestTimerRunning: false,
+          restTimerEndTime: null,
+          totalRestTimeUsed: 0,
+          lastRestTimerDuration: 0,
         });
       },
 
@@ -278,7 +422,7 @@ export const useWorkoutStore = create<WorkoutState>()(
       },
 
       addSet: async (workoutExerciseId, setData) => {
-        const { exercises, isOfflineMode } = get();
+        const { exercises, isOfflineMode, currentSetProfileId } = get();
         const exerciseIndex = exercises.findIndex(
           (e) => e.id === workoutExerciseId
         );
@@ -286,12 +430,18 @@ export const useWorkoutStore = create<WorkoutState>()(
 
         const completedAt = new Date().toISOString();
 
+        // 현재 선택된 프로필 정보 가져오기
+        const profileStore = useProfileStore.getState();
+        const currentProfile = profileStore.profiles.find(
+          (p) => p.id === (setData.profile_id || currentSetProfileId)
+        );
+
         // 로컬 운동인지 확인 (로컬에서 생성된 운동 ID)
         const isLocalWorkoutExercise = workoutExerciseId.startsWith('local_');
 
         // 로컬 모드이거나 로컬 운동인 경우
         if (isOfflineMode || isLocalWorkoutExercise) {
-          const localSet: WorkoutSet = {
+          const localSet: WorkoutSetWithProfile = {
             id: generateLocalId(),
             workout_exercise_id: workoutExerciseId,
             set_number: setData.set_number,
@@ -304,10 +454,16 @@ export const useWorkoutStore = create<WorkoutState>()(
             rpe: setData.rpe ?? null,
             completed_at: completedAt,
             created_at: completedAt,
+            profile_id: setData.profile_id || currentSetProfileId || undefined,
+            profile_name: currentProfile?.name,
           };
 
-          const newExercises = [...exercises];
-          newExercises[exerciseIndex].sets.push(localSet);
+          // 불변 업데이트 사용 (mutation 방지)
+          const newExercises = exercises.map((e, i) =>
+            i === exerciseIndex
+              ? { ...e, sets: [...e.sets, localSet] }
+              : e
+          );
           set({ exercises: newExercises });
           return localSet;
         }
@@ -332,10 +488,21 @@ export const useWorkoutStore = create<WorkoutState>()(
 
         if (error) throw error;
 
-        const newExercises = [...exercises];
-        newExercises[exerciseIndex].sets.push(data);
+        // 프로필 정보 추가
+        const setWithProfile: WorkoutSetWithProfile = {
+          ...data,
+          profile_id: setData.profile_id || currentSetProfileId || undefined,
+          profile_name: currentProfile?.name,
+        };
+
+        // 불변 업데이트 사용 (mutation 방지)
+        const newExercises = exercises.map((e, i) =>
+          i === exerciseIndex
+            ? { ...e, sets: [...e.sets, setWithProfile] }
+            : e
+        );
         set({ exercises: newExercises });
-        return data;
+        return setWithProfile;
       },
 
       updateSet: async (setId, setData) => {
@@ -395,21 +562,102 @@ export const useWorkoutStore = create<WorkoutState>()(
         set({ currentExerciseIndex: index });
       },
 
+      setCurrentSetProfile: (profileId) => {
+        set({ currentSetProfileId: profileId });
+      },
+
       startRestTimer: (seconds) => {
-        set({ restTimerSeconds: seconds, isRestTimerRunning: true });
+        const endTime = Date.now() + seconds * 1000;
+        set({
+          restTimerSeconds: seconds,
+          isRestTimerRunning: true,
+          restTimerEndTime: endTime,
+          lastRestTimerDuration: seconds,
+        });
       },
 
       stopRestTimer: () => {
-        set({ restTimerSeconds: 0, isRestTimerRunning: false });
+        const { lastRestTimerDuration, restTimerSeconds, totalRestTimeUsed } = get();
+        // 사용된 휴식 시간 = 설정된 시간 - 남은 시간 (스킵 시)
+        // 타이머가 완료되면 restTimerSeconds가 0이므로 전체 시간이 더해짐
+        const usedRestTime = lastRestTimerDuration - restTimerSeconds;
+        set({
+          restTimerSeconds: 0,
+          isRestTimerRunning: false,
+          restTimerEndTime: null,
+          totalRestTimeUsed: totalRestTimeUsed + Math.max(0, usedRestTime),
+        });
       },
 
       tickRestTimer: () => {
-        const { restTimerSeconds } = get();
+        const { restTimerSeconds, lastRestTimerDuration, totalRestTimeUsed } = get();
         if (restTimerSeconds > 0) {
           set({ restTimerSeconds: restTimerSeconds - 1 });
         } else {
-          set({ isRestTimerRunning: false });
+          // 타이머 완료 시 전체 휴식 시간 추가
+          set({
+            isRestTimerRunning: false,
+            restTimerEndTime: null,
+            totalRestTimeUsed: totalRestTimeUsed + lastRestTimerDuration,
+          });
         }
+      },
+
+      restoreRestTimer: () => {
+        const { restTimerEndTime, activeSession, lastRestTimerDuration, totalRestTimeUsed } = get();
+
+        // 활성 세션이 없거나 저장된 타이머 종료 시각이 없으면 무시
+        if (!activeSession || !restTimerEndTime) {
+          set({
+            restTimerSeconds: 0,
+            isRestTimerRunning: false,
+            restTimerEndTime: null,
+          });
+          return;
+        }
+
+        const now = Date.now();
+        const remainingMs = restTimerEndTime - now;
+
+        if (remainingMs > 0) {
+          // 아직 타이머가 남아있음 - 남은 시간 계산하여 복원
+          const remainingSeconds = Math.ceil(remainingMs / 1000);
+          set({
+            restTimerSeconds: remainingSeconds,
+            isRestTimerRunning: true,
+          });
+        } else {
+          // 타이머가 이미 만료됨 - 휴식 시간 추가하고 초기화
+          set({
+            restTimerSeconds: 0,
+            isRestTimerRunning: false,
+            restTimerEndTime: null,
+            totalRestTimeUsed: totalRestTimeUsed + lastRestTimerDuration,
+          });
+        }
+      },
+
+      getTimeBreakdown: () => {
+        const { activeSession, totalRestTimeUsed, isRestTimerRunning, lastRestTimerDuration, restTimerSeconds } = get();
+
+        if (!activeSession) {
+          return { totalSeconds: 0, restSeconds: 0, activeSeconds: 0 };
+        }
+
+        const startTime = new Date(activeSession.started_at).getTime();
+        const now = Date.now();
+        const totalSeconds = Math.floor((now - startTime) / 1000);
+
+        // 현재 진행 중인 휴식 타이머의 경과 시간도 포함
+        let currentRestUsed = 0;
+        if (isRestTimerRunning && lastRestTimerDuration > 0) {
+          currentRestUsed = lastRestTimerDuration - restTimerSeconds;
+        }
+
+        const restSeconds = totalRestTimeUsed + currentRestUsed;
+        const activeSeconds = Math.max(0, totalSeconds - restSeconds);
+
+        return { totalSeconds, restSeconds, activeSeconds };
       },
     }),
     {
@@ -420,6 +668,11 @@ export const useWorkoutStore = create<WorkoutState>()(
         exercises: state.exercises,
         currentExerciseIndex: state.currentExerciseIndex,
         isOfflineMode: state.isOfflineMode,
+        activeProfileIds: state.activeProfileIds,
+        currentSetProfileId: state.currentSetProfileId,
+        restTimerEndTime: state.restTimerEndTime,
+        totalRestTimeUsed: state.totalRestTimeUsed,
+        lastRestTimerDuration: state.lastRestTimerDuration,
       }),
     }
   )

@@ -20,6 +20,7 @@ export interface SetInput {
   is_warmup?: boolean;
   is_dropset?: boolean;
   rpe?: number;
+  profile_id?: string; // 누구의 세트인지 (같이 운동할 때)
 }
 
 // 운동 카테고리
@@ -42,6 +43,13 @@ export type Equipment =
   | 'kettlebell' // 케틀벨
   | 'band'       // 밴드
   | 'other';     // 기타
+
+// 시간 분석 데이터 타입
+export interface TimeBreakdown {
+  totalSeconds: number;    // 총 운동 시간 (초)
+  restSeconds: number;     // 휴식 시간 (초)
+  activeSeconds: number;   // 실제 운동 시간 (초)
+}
 
 // 통계 데이터 타입
 export interface ExerciseProgress {

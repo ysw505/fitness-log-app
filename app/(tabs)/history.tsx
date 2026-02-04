@@ -3,9 +3,11 @@ import { StyleSheet, FlatList, Pressable, Alert, Platform, View as RNView, Scrol
 import { router } from 'expo-router';
 
 import { Text, useThemeColors } from '@/components/Themed';
-import { useHistoryStore, CompletedWorkout, PersonalRecord } from '@/stores/historyStore';
+import { useHistoryStore, CompletedWorkout, PersonalRecord, WorkoutSetWithProfile } from '@/stores/historyStore';
 import { EXERCISE_CATEGORIES } from '@/stores/exerciseStore';
+import { useProfileStore } from '@/stores/profileStore';
 import WorkoutCalendar from '@/components/WorkoutCalendar';
+import { ProfileSwitcher } from '@/components/ProfileSwitcher';
 
 type TabType = 'calendar' | 'records' | 'stats';
 
@@ -30,6 +32,9 @@ export default function HistoryScreen() {
   } = useHistoryStore();
 
   const [activeTab, setActiveTab] = useState<TabType>('calendar');
+
+  const { profiles, currentProfileId } = useProfileStore();
+  const currentProfile = profiles.find((p) => p.id === currentProfileId);
 
   const weeklyStats = getWeeklyStats();
   const lastWeekStats = getLastWeekStats();
@@ -106,36 +111,68 @@ export default function HistoryScreen() {
 
   // 탭 버튼들
   const TabButtons = () => (
-    <RNView style={styles.tabContainer}>
-      {[
-        { id: 'calendar' as TabType, label: '기록' },
-        { id: 'records' as TabType, label: 'PR' },
-        { id: 'stats' as TabType, label: '통계' },
-      ].map((tab) => (
-        <Pressable
-          key={tab.id}
-          style={[
-            styles.tabButton,
-            activeTab === tab.id ? dynamicStyles.primaryBg : dynamicStyles.cardSecondary,
-          ]}
-          onPress={() => setActiveTab(tab.id)}
-        >
-          <Text
+    <RNView style={styles.tabHeader}>
+      {/* 프로필 스위처 */}
+      {profiles.length > 1 && (
+        <RNView style={styles.profileSwitcherContainer}>
+          <ProfileSwitcher />
+        </RNView>
+      )}
+
+      <RNView style={styles.tabContainer}>
+        {[
+          { id: 'calendar' as TabType, label: '기록' },
+          { id: 'records' as TabType, label: 'PR' },
+          { id: 'stats' as TabType, label: '통계' },
+        ].map((tab) => (
+          <Pressable
+            key={tab.id}
             style={[
-              styles.tabButtonText,
-              activeTab === tab.id ? { color: '#fff' } : dynamicStyles.textSecondary,
+              styles.tabButton,
+              activeTab === tab.id ? dynamicStyles.primaryBg : dynamicStyles.cardSecondary,
             ]}
+            onPress={() => setActiveTab(tab.id)}
           >
-            {tab.label}
-          </Text>
-        </Pressable>
-      ))}
+            <Text
+              style={[
+                styles.tabButtonText,
+                activeTab === tab.id ? { color: '#fff' } : dynamicStyles.textSecondary,
+              ]}
+            >
+              {tab.label}
+            </Text>
+          </Pressable>
+        ))}
+      </RNView>
     </RNView>
   );
+
+  // 운동에서 프로필별 통계 계산
+  const getProfileStatsInWorkout = (workout: CompletedWorkout) => {
+    const profileStats: Record<string, { sets: number; volume: number; name: string }> = {};
+
+    workout.exercises.forEach((exercise) => {
+      exercise.sets.forEach((set) => {
+        const profileId = set.profile_id || 'unknown';
+        const profileName = set.profile_name || '알 수 없음';
+
+        if (!profileStats[profileId]) {
+          profileStats[profileId] = { sets: 0, volume: 0, name: profileName };
+        }
+
+        profileStats[profileId].sets++;
+        profileStats[profileId].volume += (set.weight || 0) * (set.reps || 0);
+      });
+    });
+
+    return profileStats;
+  };
 
   // 운동 카드
   const renderWorkoutItem = ({ item }: { item: CompletedWorkout }) => {
     const categories = [...new Set(item.exercises.map((e) => e.category))];
+    const isMultiProfile = item.profile_ids && item.profile_ids.length > 1;
+    const profileStats = isMultiProfile ? getProfileStatsInWorkout(item) : null;
 
     return (
       <Pressable
@@ -154,6 +191,20 @@ export default function HistoryScreen() {
         </RNView>
 
         <Text style={[styles.workoutName, dynamicStyles.text]}>{item.name}</Text>
+
+        {/* 멀티 프로필 운동인 경우 프로필별 통계 표시 */}
+        {isMultiProfile && profileStats && (
+          <RNView style={styles.profileStatsRow}>
+            {Object.entries(profileStats).map(([profileId, stats]) => (
+              <RNView key={profileId} style={[styles.profileStatBadge, dynamicStyles.cardSecondary]}>
+                <Text style={[styles.profileStatName, dynamicStyles.text]}>{stats.name}</Text>
+                <Text style={[styles.profileStatValue, dynamicStyles.textSecondary]}>
+                  {stats.sets}세트 · {stats.volume.toLocaleString()}kg
+                </Text>
+              </RNView>
+            ))}
+          </RNView>
+        )}
 
         <RNView style={styles.categoryTags}>
           {categories.slice(0, 3).map((cat) => (
@@ -216,28 +267,48 @@ export default function HistoryScreen() {
       {/* 최근 운동 목록 */}
       <RNView style={styles.recentSection}>
         <Text style={[styles.sectionTitle, dynamicStyles.text]}>최근 운동</Text>
-        {completedWorkouts.slice(0, 10).map((workout) => (
-          <Pressable
-            key={workout.id}
-            style={[styles.workoutCard, dynamicStyles.card]}
-            onPress={() => router.push(`/workout/${workout.id}`)}
-            onLongPress={() => handleDeleteWorkout(workout)}
-          >
-            <RNView style={styles.workoutHeader}>
-              <RNView style={styles.headerLeft}>
-                <Text style={[styles.workoutDate, dynamicStyles.primary]}>{formatDate(workout.started_at)}</Text>
-                <Text style={[styles.workoutDuration, dynamicStyles.textTertiary]}>{workout.duration_minutes}분</Text>
+        {completedWorkouts.slice(0, 10).map((workout) => {
+          const isMultiProfile = workout.profile_ids && workout.profile_ids.length > 1;
+          const profileStats = isMultiProfile ? getProfileStatsInWorkout(workout) : null;
+
+          return (
+            <Pressable
+              key={workout.id}
+              style={[styles.workoutCard, dynamicStyles.card]}
+              onPress={() => router.push(`/workout/${workout.id}`)}
+              onLongPress={() => handleDeleteWorkout(workout)}
+            >
+              <RNView style={styles.workoutHeader}>
+                <RNView style={styles.headerLeft}>
+                  <Text style={[styles.workoutDate, dynamicStyles.primary]}>{formatDate(workout.started_at)}</Text>
+                  <Text style={[styles.workoutDuration, dynamicStyles.textTertiary]}>{workout.duration_minutes}분</Text>
+                </RNView>
+                <Text style={[styles.workoutVolume, dynamicStyles.text]}>
+                  {workout.total_volume.toLocaleString()}kg
+                </Text>
               </RNView>
-              <Text style={[styles.workoutVolume, dynamicStyles.text]}>
-                {workout.total_volume.toLocaleString()}kg
+              <Text style={[styles.workoutName, dynamicStyles.text]}>{workout.name}</Text>
+
+              {/* 멀티 프로필 운동인 경우 프로필별 통계 표시 */}
+              {isMultiProfile && profileStats && (
+                <RNView style={styles.profileStatsRow}>
+                  {Object.entries(profileStats).map(([profileId, stats]) => (
+                    <RNView key={profileId} style={[styles.profileStatBadge, dynamicStyles.cardSecondary]}>
+                      <Text style={[styles.profileStatName, dynamicStyles.text]}>{stats.name}</Text>
+                      <Text style={[styles.profileStatValue, dynamicStyles.textSecondary]}>
+                        {stats.sets}세트 · {stats.volume.toLocaleString()}kg
+                      </Text>
+                    </RNView>
+                  ))}
+                </RNView>
+              )}
+
+              <Text style={[styles.exerciseCount, dynamicStyles.textSecondary]}>
+                {workout.exercises.length}개 운동 · {workout.total_sets}세트
               </Text>
-            </RNView>
-            <Text style={[styles.workoutName, dynamicStyles.text]}>{workout.name}</Text>
-            <Text style={[styles.exerciseCount, dynamicStyles.textSecondary]}>
-              {workout.exercises.length}개 운동 · {workout.total_sets}세트
-            </Text>
-          </Pressable>
-        ))}
+            </Pressable>
+          );
+        })}
       </RNView>
       <RNView style={{ height: 40 }} />
     </ScrollView>
@@ -467,10 +538,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  tabContainer: {
-    flexDirection: 'row',
+  tabHeader: {
     padding: 16,
     paddingBottom: 8,
+  },
+  profileSwitcherContainer: {
+    marginBottom: 12,
+  },
+  tabContainer: {
+    flexDirection: 'row',
     gap: 8,
   },
   tabButton: {
@@ -552,6 +628,27 @@ const styles = StyleSheet.create({
   },
   exerciseCount: {
     fontSize: 13,
+  },
+
+  // Profile Stats in workout card
+  profileStatsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginVertical: 8,
+  },
+  profileStatBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  profileStatName: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  profileStatValue: {
+    fontSize: 11,
   },
 
   // PR Tab

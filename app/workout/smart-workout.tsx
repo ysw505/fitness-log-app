@@ -460,23 +460,6 @@ export default function SmartWorkoutScreen() {
               과학적 분할 훈련으로 효율적인 운동을 시작하세요
             </Text>
 
-            {/* 스마트 추천 */}
-            <RNView style={[styles.smartRecommendBox, dynamicStyles.primaryLightBg]}>
-              <Text style={[styles.smartRecommendTitle, dynamicStyles.primary]}>
-                🎯 AI 추천
-              </Text>
-              <Text style={[styles.smartRecommendText, dynamicStyles.text]}>
-                {getSmartRecommendation[0]?.reasons[0] && (
-                  <>
-                    <Text style={{ fontWeight: '700' }}>
-                      {EXERCISE_CATEGORIES.find((c) => c.id === getSmartRecommendation[0].category)?.name}
-                    </Text>
-                    {' '}운동을 추천해요 ({getSmartRecommendation[0].reasons[0]})
-                  </>
-                )}
-              </Text>
-            </RNView>
-
             {/* 분할 옵션 */}
             <Text style={[styles.sectionTitle, dynamicStyles.text]}>운동 분할 선택</Text>
             <RNView style={styles.splitGrid}>
@@ -763,20 +746,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 12,
     marginTop: 16,
-  },
-  smartRecommendBox: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  smartRecommendTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  smartRecommendText: {
-    fontSize: 15,
-    lineHeight: 22,
   },
   splitGrid: {
     flexDirection: 'row',

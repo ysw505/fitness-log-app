@@ -9,6 +9,55 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      fitness_profiles: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          avatar_url: string | null;
+          gender: 'male' | 'female' | 'other' | null;
+          birth_year: number | null;
+          height_cm: number | null;
+          weight_kg: number | null;
+          is_default: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          avatar_url?: string | null;
+          gender?: 'male' | 'female' | 'other' | null;
+          birth_year?: number | null;
+          height_cm?: number | null;
+          weight_kg?: number | null;
+          is_default?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          avatar_url?: string | null;
+          gender?: 'male' | 'female' | 'other' | null;
+          birth_year?: number | null;
+          height_cm?: number | null;
+          weight_kg?: number | null;
+          is_default?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'fitness_profiles_user_id_fkey';
+            columns: ['user_id'];
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          }
+        ];
+      };
       profiles: {
         Row: {
           id: string;
@@ -49,6 +98,7 @@ export interface Database {
           equipment: string | null;
           is_custom: boolean;
           user_id: string | null;
+          profile_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -60,6 +110,7 @@ export interface Database {
           equipment?: string | null;
           is_custom?: boolean;
           user_id?: string | null;
+          profile_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -71,6 +122,7 @@ export interface Database {
           equipment?: string | null;
           is_custom?: boolean;
           user_id?: string | null;
+          profile_id?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -86,6 +138,7 @@ export interface Database {
         Row: {
           id: string;
           user_id: string;
+          profile_id: string | null;
           name: string | null;
           started_at: string;
           finished_at: string | null;
@@ -96,6 +149,7 @@ export interface Database {
         Insert: {
           id?: string;
           user_id: string;
+          profile_id?: string | null;
           name?: string | null;
           started_at?: string;
           finished_at?: string | null;
@@ -106,6 +160,7 @@ export interface Database {
         Update: {
           id?: string;
           user_id?: string;
+          profile_id?: string | null;
           name?: string | null;
           started_at?: string;
           finished_at?: string | null;
@@ -218,6 +273,7 @@ export interface Database {
         Row: {
           id: string;
           user_id: string;
+          profile_id: string | null;
           exercise_id: string;
           record_type: 'max_weight' | 'max_reps' | 'max_volume';
           value: number;
@@ -228,6 +284,7 @@ export interface Database {
         Insert: {
           id?: string;
           user_id: string;
+          profile_id?: string | null;
           exercise_id: string;
           record_type: 'max_weight' | 'max_reps' | 'max_volume';
           value: number;
@@ -238,6 +295,7 @@ export interface Database {
         Update: {
           id?: string;
           user_id?: string;
+          profile_id?: string | null;
           exercise_id?: string;
           record_type?: 'max_weight' | 'max_reps' | 'max_volume';
           value?: number;
@@ -275,6 +333,9 @@ export interface Database {
 
 // 편의를 위한 타입 별칭
 export type Profile = Database['public']['Tables']['profiles']['Row'];
+export type FitnessProfile = Database['public']['Tables']['fitness_profiles']['Row'];
+export type FitnessProfileInsert = Database['public']['Tables']['fitness_profiles']['Insert'];
+export type FitnessProfileUpdate = Database['public']['Tables']['fitness_profiles']['Update'];
 export type Exercise = Database['public']['Tables']['exercises']['Row'];
 export type WorkoutSession = Database['public']['Tables']['workout_sessions']['Row'];
 export type WorkoutExercise = Database['public']['Tables']['workout_exercises']['Row'];

@@ -1,8 +1,8 @@
 import { StyleSheet, ScrollView, Pressable, Alert, Platform } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 
-import { Text, View } from '@/components/Themed';
-import { useHistoryStore } from '@/stores/historyStore';
+import { Text, View, useThemeColors } from '@/components/Themed';
+import { useHistoryStore, WorkoutSetWithProfile } from '@/stores/historyStore';
 import { useTemplateStore } from '@/stores/templateStore';
 import { EXERCISE_CATEGORIES } from '@/stores/exerciseStore';
 
@@ -10,8 +10,12 @@ export default function WorkoutDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { getWorkoutById, deleteWorkout } = useHistoryStore();
   const { createTemplateFromWorkout } = useTemplateStore();
+  const colors = useThemeColors();
 
   const workout = getWorkoutById(id);
+
+  // 멀티 프로필 운동인지 확인
+  const isMultiProfile = workout?.profile_ids && workout.profile_ids.length > 1;
 
   const handleSaveAsTemplate = () => {
     if (!workout) return;
@@ -149,6 +153,43 @@ export default function WorkoutDetailScreen() {
           </View>
         </View>
 
+        {/* 프로필별 통계 (멀티 프로필 운동인 경우) */}
+        {isMultiProfile && (() => {
+          // 프로필별 통계 계산
+          const profileStats: Record<string, { sets: number; volume: number; name: string }> = {};
+          workout.exercises.forEach((exercise) => {
+            exercise.sets.forEach((set) => {
+              const setWithProfile = set as WorkoutSetWithProfile;
+              const profileId = setWithProfile.profile_id || 'unknown';
+              const profileName = setWithProfile.profile_name || '알 수 없음';
+              if (!profileStats[profileId]) {
+                profileStats[profileId] = { sets: 0, volume: 0, name: profileName };
+              }
+              profileStats[profileId].sets++;
+              profileStats[profileId].volume += (set.weight || 0) * (set.reps || 0);
+            });
+          });
+
+          return (
+            <View style={styles.profileSummaryContainer}>
+              <Text style={styles.profileSummaryTitle}>프로필별 기록</Text>
+              <View style={styles.profileSummaryCards}>
+                {Object.entries(profileStats).map(([profileId, stats]) => (
+                  <View key={profileId} style={[styles.profileSummaryCard, { backgroundColor: colors.primaryLight }]}>
+                    <View style={[styles.profileAvatarSmall, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.profileAvatarText}>{stats.name.charAt(0)}</Text>
+                    </View>
+                    <Text style={[styles.profileSummaryName, { color: colors.text }]}>{stats.name}</Text>
+                    <Text style={[styles.profileSummaryStat, { color: colors.primary }]}>
+                      {stats.sets}세트 · {stats.volume.toLocaleString()}kg
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          );
+        })()}
+
         {/* 운동 목록 */}
         <Text style={styles.sectionTitle}>운동 기록</Text>
 
@@ -184,6 +225,9 @@ export default function WorkoutDetailScreen() {
               <View style={styles.setsList}>
                 <View style={styles.setsHeader}>
                   <Text style={[styles.setHeaderText, { flex: 0.5 }]}>세트</Text>
+                  {isMultiProfile && (
+                    <Text style={[styles.setHeaderText, { flex: 0.6 }]}>누구</Text>
+                  )}
                   <Text style={[styles.setHeaderText, { flex: 1 }]}>무게</Text>
                   <Text style={[styles.setHeaderText, { flex: 1 }]}>횟수</Text>
                   <Text style={[styles.setHeaderText, { flex: 1 }]}>볼륨</Text>
@@ -193,6 +237,7 @@ export default function WorkoutDetailScreen() {
                 {exercise.sets.map((set, setIdx) => {
                   const rpeInfo = getRpeLabel(set.rpe);
                   const setVolume = (set.weight || 0) * (set.reps || 0);
+                  const setWithProfile = set as WorkoutSetWithProfile;
 
                   return (
                     <View
@@ -212,6 +257,15 @@ export default function WorkoutDetailScreen() {
                           <Text style={[styles.setBadge, styles.dropBadge]}>D</Text>
                         )}
                       </View>
+                      {isMultiProfile && (
+                        <View style={[styles.setCell, { flex: 0.6 }]}>
+                          <View style={[styles.profileBadgeSmall, { backgroundColor: colors.primary + '20' }]}>
+                            <Text style={[styles.profileBadgeText, { color: colors.primary }]}>
+                              {setWithProfile.profile_name?.charAt(0) || '?'}
+                            </Text>
+                          </View>
+                        </View>
+                      )}
                       <Text style={[styles.setCellText, { flex: 1 }]}>
                         {set.weight || '-'}kg
                       </Text>
@@ -442,6 +496,62 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  profileBadgeSmall: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  profileSummaryContainer: {
+    marginBottom: 24,
+    backgroundColor: 'transparent',
+  },
+  profileSummaryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 12,
+  },
+  profileSummaryCards: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  profileSummaryCard: {
+    flex: 1,
+    minWidth: 140,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  profileAvatarSmall: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  profileAvatarText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  profileSummaryName: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  profileSummaryStat: {
+    fontSize: 13,
+    fontWeight: '500',
   },
   templateButton: {
     backgroundColor: '#eff6ff',

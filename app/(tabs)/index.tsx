@@ -1,25 +1,58 @@
 import { useState, useEffect, useMemo } from 'react';
-import { StyleSheet, Pressable, ScrollView, View as RNView } from 'react-native';
+import { StyleSheet, Pressable, ScrollView, View as RNView, Modal, Alert, Platform } from 'react-native';
 import { router } from 'expo-router';
 
 import { Text, useThemeColors } from '@/components/Themed';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import { useHistoryStore } from '@/stores/historyStore';
 import { useTemplateStore } from '@/stores/templateStore';
+import { useProfileStore } from '@/stores/profileStore';
+import { useAchievementStore, getBadgeById, getBadgeTierColor, BADGES } from '@/stores/achievementStore';
 import WeeklyActivityBar from '@/components/WeeklyActivityBar';
 
 export default function HomeScreen() {
   const colors = useThemeColors();
-  const { activeSession, exercises, startWorkout } = useWorkoutStore();
+  const { activeSession, exercises, startWorkout, cancelWorkout } = useWorkoutStore();
   const { getWeeklyStats, getRecentWorkouts } = useHistoryStore();
   const { templates } = useTemplateStore();
+  const { profiles, initLocalProfiles } = useProfileStore();
+  const {
+    currentStreak,
+    longestStreak,
+    getWeeklyProgress,
+    weeklyGoal,
+    setWeeklyGoal,
+    earnedBadges,
+    newBadges,
+    clearNewBadges,
+  } = useAchievementStore();
 
   const [isLoading, setIsLoading] = useState(false);
+  const [showBadgeModal, setShowBadgeModal] = useState(false);
   const [elapsedTime, setElapsedTime] = useState('00:00');
+
+  // 프로필 선택 모달 상태
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [selectedProfileIds, setSelectedProfileIds] = useState<string[]>([]);
+
+  // 로컬 프로필 초기화 (비로그인 시)
+  useEffect(() => {
+    if (profiles.length === 0) {
+      initLocalProfiles();
+    }
+  }, []);
 
   // 주간 통계
   const weeklyStats = getWeeklyStats();
   const recentWorkouts = getRecentWorkouts(3);
+  const weeklyProgress = getWeeklyProgress();
+
+  // 새 배지 알림 처리
+  useEffect(() => {
+    if (newBadges.length > 0) {
+      setShowBadgeModal(true);
+    }
+  }, [newBadges]);
 
   // 동적 스타일
   const dynamicStyles = useMemo(() => ({
@@ -76,6 +109,16 @@ export default function HomeScreen() {
 
   const handleStartWorkout = async () => {
     if (isLoading) return;
+
+    // 프로필이 여러 개면 선택 모달 표시
+    if (profiles.length > 1) {
+      // 기본적으로 모든 프로필 선택
+      setSelectedProfileIds(profiles.map((p) => p.id));
+      setProfileModalVisible(true);
+      return;
+    }
+
+    // 프로필이 1개 이하면 바로 시작
     setIsLoading(true);
     try {
       await startWorkout();
@@ -85,6 +128,54 @@ export default function HomeScreen() {
       alert(error?.message || '운동을 시작할 수 없습니다');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleConfirmProfiles = async () => {
+    if (selectedProfileIds.length === 0) {
+      alert('최소 1명의 프로필을 선택해주세요');
+      return;
+    }
+
+    setProfileModalVisible(false);
+    setIsLoading(true);
+    try {
+      await startWorkout(undefined, selectedProfileIds);
+      router.push('/workout/active');
+    } catch (error: any) {
+      console.error('Failed to start workout:', error);
+      alert(error?.message || '운동을 시작할 수 없습니다');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const toggleProfileSelection = (profileId: string) => {
+    setSelectedProfileIds((prev) =>
+      prev.includes(profileId)
+        ? prev.filter((id) => id !== profileId)
+        : [...prev, profileId]
+    );
+  };
+
+  const handleCancelWorkout = () => {
+    const doCancel = () => {
+      cancelWorkout();
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('운동을 취소하시겠습니까? 기록이 저장되지 않습니다.')) {
+        doCancel();
+      }
+    } else {
+      Alert.alert(
+        '운동 취소',
+        '운동을 취소하시겠습니까? 기록이 저장되지 않습니다.',
+        [
+          { text: '아니오', style: 'cancel' },
+          { text: '취소하기', style: 'destructive', onPress: doCancel },
+        ]
+      );
     }
   };
 
@@ -152,13 +243,24 @@ export default function HomeScreen() {
         </RNView>
       </RNView>
 
-      {/* 계속하기 버튼 */}
-      <Pressable
-        style={[styles.continueButton, dynamicStyles.primaryBg]}
-        onPress={() => router.push('/workout/active')}
-      >
-        <Text style={styles.continueButtonText}>계속하기 →</Text>
-      </Pressable>
+      {/* 버튼 영역 */}
+      <RNView style={styles.activeCardButtons}>
+        <Pressable
+          style={[styles.cancelWorkoutButton, dynamicStyles.cardSecondary]}
+          onPress={(e) => {
+            e.stopPropagation();
+            handleCancelWorkout();
+          }}
+        >
+          <Text style={[styles.cancelWorkoutButtonText, dynamicStyles.textSecondary]}>취소</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.continueButton, dynamicStyles.primaryBg]}
+          onPress={() => router.push('/workout/active')}
+        >
+          <Text style={styles.continueButtonText}>계속하기 →</Text>
+        </Pressable>
+      </RNView>
     </Pressable>
   );
 
@@ -231,6 +333,93 @@ export default function HomeScreen() {
         <WeeklyActivityBar />
       </RNView>
 
+      {/* 스트릭 & 주간 목표 섹션 */}
+      <RNView style={styles.achievementSection}>
+        <RNView style={styles.achievementRow}>
+          {/* 스트릭 카드 */}
+          <RNView style={[styles.streakCard, dynamicStyles.card]}>
+            <Text style={styles.streakIcon}>🔥</Text>
+            <RNView style={styles.streakInfo}>
+              <Text style={[styles.streakValue, dynamicStyles.text]}>{currentStreak}</Text>
+              <Text style={[styles.streakLabel, dynamicStyles.textSecondary]}>연속 운동</Text>
+            </RNView>
+            {longestStreak > 0 && (
+              <Text style={[styles.streakBest, dynamicStyles.textSecondary]}>
+                최고 {longestStreak}일
+              </Text>
+            )}
+          </RNView>
+
+          {/* 주간 목표 카드 */}
+          <Pressable
+            style={[styles.weeklyGoalCard, dynamicStyles.card]}
+            onPress={() => {
+              const newGoal = ((weeklyGoal % 7) + 1);
+              setWeeklyGoal(newGoal);
+            }}
+          >
+            <RNView style={styles.weeklyGoalHeader}>
+              <Text style={[styles.weeklyGoalTitle, dynamicStyles.textSecondary]}>주간 목표</Text>
+              <Text style={[styles.weeklyGoalEdit, dynamicStyles.primary]}>변경</Text>
+            </RNView>
+            <RNView style={styles.weeklyGoalProgress}>
+              <Text style={[styles.weeklyGoalValue, dynamicStyles.text]}>
+                {weeklyProgress.current}/{weeklyProgress.goal}
+              </Text>
+            </RNView>
+            {/* 프로그레스 바 */}
+            <RNView style={[styles.progressBar, dynamicStyles.cardSecondary]}>
+              <RNView
+                style={[
+                  styles.progressFill,
+                  dynamicStyles.primaryBg,
+                  { width: `${weeklyProgress.percent}%` },
+                ]}
+              />
+            </RNView>
+            {weeklyProgress.percent >= 100 && (
+              <Text style={styles.goalComplete}>목표 달성! 🎉</Text>
+            )}
+          </Pressable>
+        </RNView>
+
+        {/* 획득한 배지 미리보기 */}
+        {earnedBadges.length > 0 && (
+          <Pressable
+            style={[styles.badgesPreview, dynamicStyles.card]}
+            onPress={() => router.push('/profile')}
+          >
+            <RNView style={styles.badgesPreviewHeader}>
+              <Text style={[styles.badgesPreviewTitle, dynamicStyles.text]}>획득한 배지</Text>
+              <Text style={[styles.badgesPreviewCount, dynamicStyles.primary]}>
+                {earnedBadges.length}개
+              </Text>
+            </RNView>
+            <RNView style={styles.badgesPreviewList}>
+              {earnedBadges.slice(-5).reverse().map((earned) => {
+                const badge = getBadgeById(earned.badgeId);
+                if (!badge) return null;
+                return (
+                  <RNView
+                    key={earned.badgeId}
+                    style={[styles.badgeIcon, { backgroundColor: getBadgeTierColor(badge.tier) + '20' }]}
+                  >
+                    <Text style={styles.badgeIconText}>{badge.icon}</Text>
+                  </RNView>
+                );
+              })}
+              {earnedBadges.length > 5 && (
+                <RNView style={[styles.badgeMore, dynamicStyles.cardSecondary]}>
+                  <Text style={[styles.badgeMoreText, dynamicStyles.textSecondary]}>
+                    +{earnedBadges.length - 5}
+                  </Text>
+                </RNView>
+              )}
+            </RNView>
+          </Pressable>
+        )}
+      </RNView>
+
       <RNView style={styles.quickStats}>
         <Text style={[styles.sectionTitle, dynamicStyles.text]}>이번 주 요약</Text>
         <RNView style={styles.statsRow}>
@@ -277,6 +466,125 @@ export default function HomeScreen() {
       )}
 
       <RNView style={{ height: 20 }} />
+
+      {/* 프로필 선택 모달 */}
+      <Modal
+        visible={profileModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProfileModalVisible(false)}
+      >
+        <RNView style={styles.modalOverlay}>
+          <RNView style={[styles.modalContent, dynamicStyles.card]}>
+            <Text style={[styles.modalTitle, dynamicStyles.text]}>누구와 운동하나요?</Text>
+            <Text style={[styles.modalSubtitle, dynamicStyles.textSecondary]}>
+              같이 운동할 프로필을 선택하세요
+            </Text>
+
+            <RNView style={styles.profileList}>
+              {profiles.map((profile) => {
+                const isSelected = selectedProfileIds.includes(profile.id);
+                return (
+                  <Pressable
+                    key={profile.id}
+                    style={[
+                      styles.profileSelectItem,
+                      dynamicStyles.cardSecondary,
+                      isSelected && { borderColor: colors.primary, borderWidth: 2 },
+                    ]}
+                    onPress={() => toggleProfileSelection(profile.id)}
+                  >
+                    <RNView style={[styles.profileAvatar, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.profileAvatarText}>{profile.name.charAt(0)}</Text>
+                    </RNView>
+                    <Text style={[styles.profileSelectName, dynamicStyles.text]}>
+                      {profile.name}
+                    </Text>
+                    <RNView
+                      style={[
+                        styles.profileCheckbox,
+                        isSelected
+                          ? { backgroundColor: colors.primary }
+                          : { borderColor: colors.border, borderWidth: 2 },
+                      ]}
+                    >
+                      {isSelected && <Text style={styles.profileCheckmark}>✓</Text>}
+                    </RNView>
+                  </Pressable>
+                );
+              })}
+            </RNView>
+
+            <Pressable
+              style={[styles.modalStartButton, dynamicStyles.primaryBg]}
+              onPress={handleConfirmProfiles}
+            >
+              <Text style={styles.modalStartButtonText}>
+                {selectedProfileIds.length === 1
+                  ? '혼자 운동 시작'
+                  : `${selectedProfileIds.length}명이서 운동 시작`}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.modalCancelButton}
+              onPress={() => setProfileModalVisible(false)}
+            >
+              <Text style={[styles.modalCancelButtonText, dynamicStyles.textSecondary]}>취소</Text>
+            </Pressable>
+          </RNView>
+        </RNView>
+      </Modal>
+
+      {/* 새 배지 획득 모달 */}
+      <Modal
+        visible={showBadgeModal && newBadges.length > 0}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowBadgeModal(false);
+          clearNewBadges();
+        }}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => {
+            setShowBadgeModal(false);
+            clearNewBadges();
+          }}
+        >
+          <RNView style={[styles.badgeModalContent, dynamicStyles.card]}>
+            <Text style={styles.badgeModalTitle}>🎉 새 배지 획득!</Text>
+            {newBadges.map((earned) => {
+              const badge = getBadgeById(earned.badgeId);
+              if (!badge) return null;
+              return (
+                <RNView
+                  key={earned.badgeId}
+                  style={[styles.newBadgeItem, { backgroundColor: getBadgeTierColor(badge.tier) + '20' }]}
+                >
+                  <Text style={styles.newBadgeIcon}>{badge.icon}</Text>
+                  <RNView style={styles.newBadgeInfo}>
+                    <Text style={[styles.newBadgeName, dynamicStyles.text]}>{badge.name}</Text>
+                    <Text style={[styles.newBadgeDesc, dynamicStyles.textSecondary]}>
+                      {badge.description}
+                    </Text>
+                  </RNView>
+                </RNView>
+              );
+            })}
+            <Pressable
+              style={[styles.badgeModalButton, dynamicStyles.primaryBg]}
+              onPress={() => {
+                setShowBadgeModal(false);
+                clearNewBadges();
+              }}
+            >
+              <Text style={styles.badgeModalButtonText}>확인</Text>
+            </Pressable>
+          </RNView>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -449,9 +757,25 @@ const styles = StyleSheet.create({
   },
 
   // 계속하기 버튼
-  continueButton: {
+  activeCardButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  cancelWorkoutButton: {
     borderRadius: 12,
-    padding: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelWorkoutButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  continueButton: {
+    flex: 1,
+    borderRadius: 12,
+    padding: 14,
     alignItems: 'center',
   },
   continueButtonText: {
@@ -552,5 +876,260 @@ const styles = StyleSheet.create({
   },
   templateCardInfo: {
     fontSize: 13,
+  },
+
+  // 프로필 선택 모달
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 360,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  profileList: {
+    gap: 12,
+    marginBottom: 24,
+  },
+  profileSelectItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    gap: 12,
+  },
+  profileAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileAvatarText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  profileSelectName: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  profileCheckbox: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileCheckmark: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalStartButton: {
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  modalStartButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalCancelButton: {
+    padding: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  modalCancelButtonText: {
+    fontSize: 14,
+  },
+
+  // 성취 섹션
+  achievementSection: {
+    marginTop: 24,
+    gap: 12,
+  },
+  achievementRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  streakCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    gap: 12,
+  },
+  streakIcon: {
+    fontSize: 32,
+  },
+  streakInfo: {
+    flex: 1,
+  },
+  streakValue: {
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  streakLabel: {
+    fontSize: 12,
+  },
+  streakBest: {
+    fontSize: 11,
+    position: 'absolute',
+    top: 8,
+    right: 8,
+  },
+  weeklyGoalCard: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 16,
+  },
+  weeklyGoalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  weeklyGoalTitle: {
+    fontSize: 12,
+  },
+  weeklyGoalEdit: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  weeklyGoalProgress: {
+    marginBottom: 8,
+  },
+  weeklyGoalValue: {
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  progressBar: {
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  goalComplete: {
+    fontSize: 11,
+    color: '#22c55e',
+    fontWeight: '600',
+    marginTop: 6,
+    textAlign: 'center',
+  },
+
+  // 배지 미리보기
+  badgesPreview: {
+    padding: 16,
+    borderRadius: 16,
+  },
+  badgesPreviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  badgesPreviewTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  badgesPreviewCount: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  badgesPreviewList: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  badgeIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeIconText: {
+    fontSize: 20,
+  },
+  badgeMore: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeMoreText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // 새 배지 모달
+  badgeModalContent: {
+    borderRadius: 20,
+    padding: 24,
+    width: '90%',
+    maxWidth: 340,
+    alignItems: 'center',
+  },
+  badgeModalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 20,
+  },
+  newBadgeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    width: '100%',
+    gap: 12,
+  },
+  newBadgeIcon: {
+    fontSize: 36,
+  },
+  newBadgeInfo: {
+    flex: 1,
+  },
+  newBadgeName: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  newBadgeDesc: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  badgeModalButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  badgeModalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

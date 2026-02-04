@@ -8,6 +8,13 @@ import {
   deleteWorkoutFromCloud,
   mergeWorkouts,
 } from '@/services/syncService';
+import { useProfileStore } from './profileStore';
+
+// 프로필 정보가 포함된 세트 타입 (히스토리용)
+export interface WorkoutSetWithProfile extends WorkoutSet {
+  profile_id?: string;
+  profile_name?: string;
+}
 
 // 웹/네이티브 호환 스토리지
 const getStorage = (): StateStorage => {
@@ -36,11 +43,13 @@ export interface CompletedExercise {
   exercise_name: string;
   exercise_name_ko: string | null;
   category: string;
-  sets: WorkoutSet[];
+  sets: WorkoutSetWithProfile[];
 }
 
 export interface CompletedWorkout {
   id: string;
+  profile_id?: string; // 피트니스 프로필 ID (단일 프로필 운동시)
+  profile_ids?: string[]; // 같이 운동한 프로필 IDs (멀티 프로필)
   name: string;
   started_at: string;
   finished_at: string;
@@ -48,6 +57,9 @@ export interface CompletedWorkout {
   exercises: CompletedExercise[];
   total_sets: number;
   total_volume: number; // kg
+  // 시간 분석 (optional for backwards compatibility)
+  rest_seconds?: number;   // 총 휴식 시간 (초)
+  active_seconds?: number; // 총 활동 시간 (초)
 }
 
 // 운동별 기록 (차트용)
@@ -62,7 +74,7 @@ export interface ExerciseRecord {
     total_volume: number;
     total_sets: number;
     total_reps: number;
-    sets: WorkoutSet[];
+    sets: WorkoutSetWithProfile[];
   }[];
 }
 
@@ -128,6 +140,8 @@ interface HistoryState {
   getRecentPRs: () => PersonalRecord[];
   // 이번 달 운동한 날 수
   getMonthlyWorkoutDays: () => number;
+  // 전체 기록 초기화
+  clearAllHistory: () => void;
 }
 
 // Epley 공식으로 1RM 추정
@@ -135,6 +149,56 @@ const calculate1RM = (weight: number, reps: number): number => {
   if (reps === 1) return weight;
   if (reps === 0 || weight === 0) return 0;
   return Math.round(weight * (1 + reps / 30));
+};
+
+// 현재 프로필의 운동 기록만 필터링 (세트 레벨에서 필터링)
+const filterByCurrentProfile = (workouts: CompletedWorkout[]): CompletedWorkout[] => {
+  const currentProfileId = useProfileStore.getState().currentProfileId;
+
+  // 프로필이 선택되지 않았으면 모두 표시
+  if (!currentProfileId) return workouts;
+
+  return workouts
+    .map((workout) => {
+      // 이 운동에 현재 프로필의 세트가 있는지 확인
+      const hasCurrentProfileSets = workout.exercises.some((e) =>
+        e.sets.some((s) => s.profile_id === currentProfileId || !s.profile_id)
+      );
+
+      // 단일 프로필 운동이거나 현재 프로필이 참여한 운동만 포함
+      if (workout.profile_id === currentProfileId || !workout.profile_id) {
+        return workout;
+      }
+
+      // 멀티 프로필 운동인 경우, 현재 프로필의 세트만 필터링
+      if (workout.profile_ids?.includes(currentProfileId) || hasCurrentProfileSets) {
+        const filteredExercises = workout.exercises.map((exercise) => ({
+          ...exercise,
+          sets: exercise.sets.filter(
+            (s) => s.profile_id === currentProfileId || !s.profile_id
+          ),
+        })).filter((e) => e.sets.length > 0);
+
+        if (filteredExercises.length === 0) return null;
+
+        // 필터링된 세트 기준으로 통계 재계산
+        const totalSets = filteredExercises.reduce((sum, e) => sum + e.sets.length, 0);
+        const totalVolume = filteredExercises.reduce(
+          (sum, e) => sum + e.sets.reduce((setSum, s) => setSum + (s.weight || 0) * (s.reps || 0), 0),
+          0
+        );
+
+        return {
+          ...workout,
+          exercises: filteredExercises,
+          total_sets: totalSets,
+          total_volume: totalVolume,
+        };
+      }
+
+      return null;
+    })
+    .filter((w): w is CompletedWorkout => w !== null);
 };
 
 export const useHistoryStore = create<HistoryState>()(
@@ -407,15 +471,17 @@ export const useHistoryStore = create<HistoryState>()(
 
       getRecentWorkouts: (limit = 10) => {
         const { completedWorkouts } = get();
-        return completedWorkouts.slice(0, limit);
+        const filtered = filterByCurrentProfile(completedWorkouts);
+        return filtered.slice(0, limit);
       },
 
       getWeeklyStats: () => {
         const { completedWorkouts } = get();
+        const filtered = filterByCurrentProfile(completedWorkouts);
         const now = new Date();
         const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-        const weekWorkouts = completedWorkouts.filter(
+        const weekWorkouts = filtered.filter(
           (w) => new Date(w.finished_at) >= weekAgo
         );
 
@@ -429,10 +495,11 @@ export const useHistoryStore = create<HistoryState>()(
 
       getMonthlyStats: () => {
         const { completedWorkouts } = get();
+        const filtered = filterByCurrentProfile(completedWorkouts);
         const now = new Date();
         const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-        const monthWorkouts = completedWorkouts.filter(
+        const monthWorkouts = filtered.filter(
           (w) => new Date(w.finished_at) >= monthAgo
         );
 
@@ -474,13 +541,14 @@ export const useHistoryStore = create<HistoryState>()(
       // 운동 스트릭 계산 (연속 운동 일수)
       getWorkoutStreak: () => {
         const { completedWorkouts } = get();
-        if (completedWorkouts.length === 0) return 0;
+        const filtered = filterByCurrentProfile(completedWorkouts);
+        if (filtered.length === 0) return 0;
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
         const workoutDates = new Set(
-          completedWorkouts.map((w) => {
+          filtered.map((w) => {
             const date = new Date(w.finished_at);
             date.setHours(0, 0, 0, 0);
             return date.getTime();
@@ -505,9 +573,10 @@ export const useHistoryStore = create<HistoryState>()(
       // 카테고리별 운동 횟수
       getCategoryStats: () => {
         const { completedWorkouts } = get();
+        const filtered = filterByCurrentProfile(completedWorkouts);
         const categoryCount: Record<string, number> = {};
 
-        completedWorkouts.forEach((workout) => {
+        filtered.forEach((workout) => {
           workout.exercises.forEach((exercise) => {
             categoryCount[exercise.category] = (categoryCount[exercise.category] || 0) + 1;
           });
@@ -521,12 +590,13 @@ export const useHistoryStore = create<HistoryState>()(
       // 주간 카테고리별 세트 수 (볼륨 트래킹)
       getWeeklyCategorySets: () => {
         const { completedWorkouts } = get();
+        const filtered = filterByCurrentProfile(completedWorkouts);
         const now = new Date();
         const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
         const categorySets: Record<string, number> = {};
 
-        completedWorkouts
+        filtered
           .filter((w) => new Date(w.finished_at) >= weekAgo)
           .forEach((workout) => {
             workout.exercises.forEach((exercise) => {
@@ -541,10 +611,11 @@ export const useHistoryStore = create<HistoryState>()(
       // 각 카테고리별 마지막 운동 날짜
       getCategoryLastPerformed: () => {
         const { completedWorkouts } = get();
+        const filtered = filterByCurrentProfile(completedWorkouts);
         const categoryLastDate: Record<string, string> = {};
 
         // 최신 운동부터 순회하므로, 첫 번째로 나온 날짜가 가장 최근
-        completedWorkouts.forEach((workout) => {
+        filtered.forEach((workout) => {
           workout.exercises.forEach((exercise) => {
             if (!categoryLastDate[exercise.category]) {
               categoryLastDate[exercise.category] = workout.finished_at;
@@ -558,11 +629,12 @@ export const useHistoryStore = create<HistoryState>()(
       // 지난주 통계 (비교용)
       getLastWeekStats: () => {
         const { completedWorkouts } = get();
+        const filtered = filterByCurrentProfile(completedWorkouts);
         const now = new Date();
         const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
-        const lastWeekWorkouts = completedWorkouts.filter((w) => {
+        const lastWeekWorkouts = filtered.filter((w) => {
           const date = new Date(w.finished_at);
           return date >= twoWeeksAgo && date < weekAgo;
         });
@@ -578,20 +650,23 @@ export const useHistoryStore = create<HistoryState>()(
       // 전체 운동 횟수
       getTotalWorkoutCount: () => {
         const { completedWorkouts } = get();
-        return completedWorkouts.length;
+        const filtered = filterByCurrentProfile(completedWorkouts);
+        return filtered.length;
       },
 
       // 평균 운동 시간
       getAverageWorkoutDuration: () => {
         const { completedWorkouts } = get();
-        if (completedWorkouts.length === 0) return 0;
-        const totalMinutes = completedWorkouts.reduce((sum, w) => sum + w.duration_minutes, 0);
-        return Math.round(totalMinutes / completedWorkouts.length);
+        const filtered = filterByCurrentProfile(completedWorkouts);
+        if (filtered.length === 0) return 0;
+        const totalMinutes = filtered.reduce((sum, w) => sum + w.duration_minutes, 0);
+        return Math.round(totalMinutes / filtered.length);
       },
 
       // 최근 4주 볼륨 추이
       getWeeklyVolumeTrend: () => {
         const { completedWorkouts } = get();
+        const filtered = filterByCurrentProfile(completedWorkouts);
         const weeks: { week: string; volume: number; workouts: number }[] = [];
 
         for (let i = 0; i < 4; i++) {
@@ -599,7 +674,7 @@ export const useHistoryStore = create<HistoryState>()(
           const weekStart = new Date(now.getTime() - (i + 1) * 7 * 24 * 60 * 60 * 1000);
           const weekEnd = new Date(now.getTime() - i * 7 * 24 * 60 * 60 * 1000);
 
-          const weekWorkouts = completedWorkouts.filter((w) => {
+          const weekWorkouts = filtered.filter((w) => {
             const date = new Date(w.finished_at);
             return date >= weekStart && date < weekEnd;
           });
@@ -619,9 +694,10 @@ export const useHistoryStore = create<HistoryState>()(
       // 가장 많이 한 운동 TOP 5
       getMostPerformedExercises: () => {
         const { completedWorkouts } = get();
+        const filtered = filterByCurrentProfile(completedWorkouts);
         const exerciseCount: Record<string, { name: string; count: number }> = {};
 
-        completedWorkouts.forEach((workout) => {
+        filtered.forEach((workout) => {
           workout.exercises.forEach((exercise) => {
             const id = exercise.exercise_id;
             if (!exerciseCount[id]) {
@@ -658,16 +734,27 @@ export const useHistoryStore = create<HistoryState>()(
       // 이번 달 운동한 날 수
       getMonthlyWorkoutDays: () => {
         const { completedWorkouts } = get();
+        const filtered = filterByCurrentProfile(completedWorkouts);
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
         const workoutDates = new Set(
-          completedWorkouts
+          filtered
             .filter((w) => new Date(w.finished_at) >= monthStart)
             .map((w) => new Date(w.finished_at).toDateString())
         );
 
         return workoutDates.size;
+      },
+
+      // 전체 기록 초기화
+      clearAllHistory: () => {
+        set({
+          completedWorkouts: [],
+          exerciseRecords: {},
+          personalRecords: {},
+          lastSyncedAt: null,
+        });
       },
     }),
     {

@@ -36,6 +36,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="exercises"
+        options={{
+          title: '운동',
+          tabBarIcon: ({ color }) => <TabBarIcon name="heartbeat" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="stats"
         options={{
           title: '통계',
@@ -47,6 +54,12 @@ export default function TabLayout() {
         options={{
           title: '프로필',
           tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="two"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

@@ -57,6 +57,7 @@ export default function AddExerciseScreen() {
         muscle_group: [],
         equipment: selectedEquipment || null,
         user_id: null,
+        profile_id: null,
       });
 
       if (Platform.OS === 'web') {

@@ -310,10 +310,13 @@ export default function ActiveWorkoutScreen() {
   const currentProfile = profiles.find((p) => p.id === currentSetProfileId);
 
   // 운동별 입력값 관리
-  const [inputValues, setInputValues] = useState<Record<string, { weight: string; reps: string }>>({});
+  const [inputValues, setInputValues] = useState<Record<string, { weight: string; reps: string; note: string }>>({});
 
   // 입력 오류 상태 (빨간 테두리 표시용)
   const [inputErrors, setInputErrors] = useState<Record<string, { weight: boolean; reps: boolean }>>({});
+
+  // 세트 메모 입력 확장 상태
+  const [noteExpanded, setNoteExpanded] = useState<Record<string, boolean>>({});
 
   // 동적 스타일
   const dynamicStyles = useMemo(() => ({
@@ -556,10 +559,11 @@ export default function ActiveWorkoutScreen() {
     const lastSet = exercise?.sets[exercise.sets.length - 1];
 
     if (lastSet) {
-      // 이전 세트 값 그대로 사용
+      // 이전 세트 값 그대로 사용 (메모는 매 세트마다 새로 작성)
       return {
         weight: lastSet.weight?.toString() || '',
         reps: lastSet.reps?.toString() || '',
+        note: '',
       };
     }
 
@@ -571,6 +575,7 @@ export default function ActiveWorkoutScreen() {
       return {
         weight: todayRec.weight.toString(),
         reps: todayRec.reps.toString(),
+        note: '',
       };
     }
 
@@ -580,13 +585,14 @@ export default function ActiveWorkoutScreen() {
       return {
         weight: prevRecord.max_weight.toString(),
         reps: Math.round(prevRecord.total_reps / prevRecord.total_sets).toString() || '',
+        note: '',
       };
     }
 
-    return { weight: '', reps: '' };
+    return { weight: '', reps: '', note: '' };
   };
 
-  const updateInputValue = (exerciseId: string, exerciseDbId: string, category: string, field: 'weight' | 'reps', value: string) => {
+  const updateInputValue = (exerciseId: string, exerciseDbId: string, category: string, field: 'weight' | 'reps' | 'note', value: string) => {
     setInputValues((prev) => ({
       ...prev,
       [exerciseId]: {
@@ -715,10 +721,12 @@ export default function ActiveWorkoutScreen() {
     const setNumber = (currentExercise?.sets.length || 0) + 1;
 
     try {
+      const noteValue = values.note?.trim() || undefined;
       const newSet = await addSet(workoutExerciseId, {
         set_number: setNumber,
         weight: weightValue, // 0kg allowed (empty = 0)
         reps: repsValue,
+        note: noteValue,
       });
 
       // 입력값 초기화하여 다음 세트 준비
@@ -961,46 +969,60 @@ export default function ActiveWorkoutScreen() {
                 const setWithProfile = set as WorkoutSetWithProfile;
                 const setRpeColor = set.rpe ? getRpeColor(set.rpe) : null;
                 return (
-                  <RNView
-                    key={set.id}
-                    style={[
-                      styles.completedSetRow,
-                      {
-                        backgroundColor: colors.success + '15',
-                        borderLeftColor: colors.success,
-                        borderColor: colors.success + '30',
-                      }
-                    ]}
-                  >
-                    {/* 체크마크 아이콘 */}
-                    <RNView style={[styles.completedCheckmark, { backgroundColor: colors.success }]}>
-                      <Text style={styles.completedCheckmarkText}>✓</Text>
+                  <RNView key={set.id}>
+                    <RNView
+                      style={[
+                        styles.completedSetRow,
+                        {
+                          backgroundColor: colors.success + '15',
+                          borderLeftColor: colors.success,
+                          borderColor: colors.success + '30',
+                        },
+                        set.note && styles.completedSetRowWithNote,
+                      ]}
+                    >
+                      {/* 체크마크 아이콘 */}
+                      <RNView style={[styles.completedCheckmark, { backgroundColor: colors.success }]}>
+                        <Text style={styles.completedCheckmarkText}>✓</Text>
+                      </RNView>
+                      <Text style={[styles.completedSetNumber, dynamicStyles.textTertiary]}>{index + 1}</Text>
+                      {activeProfileIds.length > 1 && (
+                        <RNView style={[styles.setProfileBadge, { backgroundColor: colors.primary + '20' }]}>
+                          <Text style={[styles.setProfileText, { color: colors.primary }]}>
+                            {setWithProfile.profile_name?.charAt(0) || '?'}
+                          </Text>
+                        </RNView>
+                      )}
+                      <Text style={[styles.completedSetValue, dynamicStyles.textSecondary]}>{set.weight}</Text>
+                      <Text style={[styles.completedSetValue, dynamicStyles.textSecondary]}>{set.reps}</Text>
+                      {/* RPE 배지 */}
+                      <RNView style={[styles.setRpeBadge, setRpeColor && { backgroundColor: setRpeColor + '20' }]}>
+                        {set.rpe && setRpeColor ? (
+                          <Text style={[styles.setRpeText, { color: setRpeColor }]}>{set.rpe}</Text>
+                        ) : (
+                          <Text style={[styles.setRpeText, dynamicStyles.textTertiary]}>{set.rpe || '-'}</Text>
+                        )}
+                      </RNView>
+                      {/* 메모 아이콘 (메모가 있을 때) */}
+                      {set.note && (
+                        <RNView style={styles.setNoteIndicator}>
+                          <Text style={[styles.setNoteIndicatorText, dynamicStyles.textTertiary]}>✎</Text>
+                        </RNView>
+                      )}
+                      <Pressable
+                        style={styles.deleteSetButton}
+                        onPress={() => handleDeleteSet(set.id)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Text style={[styles.deleteSetButtonText, dynamicStyles.textTertiary]}>✕</Text>
+                      </Pressable>
                     </RNView>
-                    <Text style={[styles.completedSetNumber, dynamicStyles.textTertiary]}>{index + 1}</Text>
-                    {activeProfileIds.length > 1 && (
-                      <RNView style={[styles.setProfileBadge, { backgroundColor: colors.primary + '20' }]}>
-                        <Text style={[styles.setProfileText, { color: colors.primary }]}>
-                          {setWithProfile.profile_name?.charAt(0) || '?'}
-                        </Text>
+                    {/* 세트 메모 표시 */}
+                    {set.note && (
+                      <RNView style={[styles.setNoteRow, { backgroundColor: colors.success + '08' }]}>
+                        <Text style={[styles.setNoteText, dynamicStyles.textTertiary]}>{set.note}</Text>
                       </RNView>
                     )}
-                    <Text style={[styles.completedSetValue, dynamicStyles.textSecondary]}>{set.weight}</Text>
-                    <Text style={[styles.completedSetValue, dynamicStyles.textSecondary]}>{set.reps}</Text>
-                    {/* RPE 배지 */}
-                    <RNView style={[styles.setRpeBadge, setRpeColor && { backgroundColor: setRpeColor + '20' }]}>
-                      {set.rpe ? (
-                        <Text style={[styles.setRpeText, { color: setRpeColor }]}>{set.rpe}</Text>
-                      ) : (
-                        <Text style={[styles.setRpeText, dynamicStyles.textTertiary]}>-</Text>
-                      )}
-                    </RNView>
-                    <Pressable
-                      style={styles.deleteSetButton}
-                      onPress={() => handleDeleteSet(set.id)}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Text style={[styles.deleteSetButtonText, dynamicStyles.textTertiary]}>✕</Text>
-                    </Pressable>
                   </RNView>
                 );
               })}
@@ -1037,12 +1059,21 @@ export default function ActiveWorkoutScreen() {
                     <Text style={[styles.stepperBtnText, dynamicStyles.textSecondary]}>−</Text>
                   </Pressable>
                   <TextInput
-                    style={[styles.compactInput, dynamicStyles.cardSecondary, { color: colors.text }]}
+                    style={{
+                      flex: 1,
+                      height: 48,
+                      fontSize: 20,
+                      fontWeight: '700',
+                      textAlign: 'center',
+                      color: colors.text,
+                      backgroundColor: 'transparent',
+                    }}
                     placeholder="0"
                     keyboardType="numeric"
-                    value={getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).weight}
+                    value={getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).weight || ''}
                     onChangeText={(v) => updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'weight', v)}
-                    placeholderTextColor={colors.textTertiary}
+                    placeholderTextColor={colors.text}
+                    underlineColorAndroid="transparent"
                   />
                   <Pressable
                     style={styles.stepperBtn}
@@ -1081,10 +1112,18 @@ export default function ActiveWorkoutScreen() {
                     <Text style={[styles.stepperBtnText, dynamicStyles.textSecondary]}>−</Text>
                   </Pressable>
                   <TextInput
-                    style={[styles.compactInput, dynamicStyles.cardSecondary, { color: colors.text }]}
+                    style={{
+                      flex: 1,
+                      height: 48,
+                      fontSize: 20,
+                      fontWeight: '700',
+                      textAlign: 'center',
+                      color: colors.text,
+                      backgroundColor: 'transparent',
+                    }}
                     placeholder="0"
                     keyboardType="numeric"
-                    value={getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).reps}
+                    value={getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).reps || ''}
                     onChangeText={(v) => {
                       updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'reps', v);
                       if (inputErrors[exercise.id]?.reps) {
@@ -1095,7 +1134,9 @@ export default function ActiveWorkoutScreen() {
                         });
                       }
                     }}
-                    placeholderTextColor={colors.textTertiary}
+                    placeholderTextColor={colors.text}
+                    underlineColorAndroid="transparent"
+                    autoCorrect={false}
                   />
                   <Pressable
                     style={styles.stepperBtn}
@@ -1120,22 +1161,56 @@ export default function ActiveWorkoutScreen() {
                 )}
               </RNView>
 
-              {/* 세트 추가 버튼 */}
-              <Pressable
-                style={[styles.compactAddBtn, dynamicStyles.primaryBg]}
-                onPress={() => handleAddSet(exercise.id, exercise.exercise_id, exercise.exercise.category)}
-              >
-                <Text style={styles.compactAddBtnText}>+</Text>
-                {activeProfileIds.length > 1 && currentProfile && (
-                  <Text style={styles.compactAddBtnProfile}>{currentProfile.name.charAt(0)}</Text>
-                )}
-              </Pressable>
+              {/* 메모 토글 + 세트 추가 버튼 */}
+              <RNView style={styles.setActionButtons}>
+                {/* 메모 토글 버튼 */}
+                <Pressable
+                  style={[
+                    styles.noteToggleBtn,
+                    dynamicStyles.cardSecondary,
+                    noteExpanded[exercise.id] && { backgroundColor: colors.primary + '20' },
+                  ]}
+                  onPress={() => setNoteExpanded((prev) => ({ ...prev, [exercise.id]: !prev[exercise.id] }))}
+                >
+                  <Text style={[
+                    styles.noteToggleBtnText,
+                    noteExpanded[exercise.id] ? { color: colors.primary } : dynamicStyles.textTertiary,
+                  ]}>
+                    ✎
+                  </Text>
+                </Pressable>
+
+                {/* 세트 추가 버튼 */}
+                <Pressable
+                  style={[styles.compactAddBtn, dynamicStyles.primaryBg]}
+                  onPress={() => handleAddSet(exercise.id, exercise.exercise_id, exercise.exercise.category)}
+                >
+                  <Text style={styles.compactAddBtnText}>+</Text>
+                  {activeProfileIds.length > 1 && currentProfile && (
+                    <Text style={styles.compactAddBtnProfile}>{currentProfile.name.charAt(0)}</Text>
+                  )}
+                </Pressable>
+              </RNView>
             </RNView>
+
+            {/* 메모 입력 필드 (확장 시) */}
+            {noteExpanded[exercise.id] && (
+              <RNView style={styles.noteInputContainer}>
+                <TextInput
+                  style={[styles.noteInput, dynamicStyles.cardSecondary, { color: colors.text }]}
+                  placeholder="세트 메모 (예: 그립 변경, 컨디션 등)"
+                  placeholderTextColor={colors.textTertiary}
+                  value={getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).note}
+                  onChangeText={(v) => updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'note', v)}
+                  maxLength={100}
+                />
+              </RNView>
+            )}
           </RNView>
         </RNView>
       </ScaleDecorator>
     );
-  }, [exercises, colors, dynamicStyles, activeProfileIds, currentSetProfileId, currentProfile, targetRepRange, handleAddSet, handleDeleteSet, getExerciseRecords, getTodayRecommendation, getInputValues, updateInputValue, personalRecords]);
+  }, [exercises, colors, dynamicStyles, activeProfileIds, currentSetProfileId, currentProfile, targetRepRange, handleAddSet, handleDeleteSet, getExerciseRecords, getTodayRecommendation, getInputValues, updateInputValue, personalRecords, noteExpanded]);
 
   // 진행 중인 운동이 없으면 빈 화면 표시
   if (!activeSession) {
@@ -2086,6 +2161,9 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     textAlign: 'center',
+    textAlignVertical: 'center',
+    padding: 0,
+    margin: 0,
   },
   inputHint: {
     fontSize: 11,
@@ -2111,6 +2189,30 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     marginTop: -2,
+  },
+  setActionButtons: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  noteToggleBtn: {
+    width: 40,
+    height: 48,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 15,
+  },
+  noteToggleBtnText: {
+    fontSize: 18,
+  },
+  noteInputContainer: {
+    marginTop: 12,
+  },
+  noteInput: {
+    padding: 10,
+    borderRadius: 8,
+    fontSize: 14,
   },
   addMoreButton: {
     borderWidth: 2,
@@ -2624,6 +2726,29 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     textAlign: 'center',
+  },
+  completedSetRowWithNote: {
+    marginBottom: 0,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  setNoteIndicator: {
+    marginRight: 4,
+  },
+  setNoteIndicatorText: {
+    fontSize: 12,
+  },
+  setNoteRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 4,
+    marginLeft: 25,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+  },
+  setNoteText: {
+    fontSize: 12,
+    fontStyle: 'italic',
   },
 
   // ===== 활성 입력 영역 스타일 (파란색 강조) =====

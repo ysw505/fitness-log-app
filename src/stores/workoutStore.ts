@@ -471,6 +471,7 @@ export const useWorkoutStore = create<WorkoutState>()(
             is_warmup: setData.is_warmup ?? false,
             is_dropset: setData.is_dropset ?? false,
             rpe: setData.rpe ?? null,
+            note: setData.note ?? null,
             completed_at: completedAt,
             created_at: completedAt,
             profile_id: setData.profile_id || currentSetProfileId || undefined,
@@ -496,6 +497,7 @@ export const useWorkoutStore = create<WorkoutState>()(
           is_warmup: setData.is_warmup,
           is_dropset: setData.is_dropset,
           rpe: setData.rpe,
+          note: setData.note,
           completed_at: completedAt,
         };
 
@@ -539,6 +541,7 @@ export const useWorkoutStore = create<WorkoutState>()(
               is_warmup: setData.is_warmup,
               is_dropset: setData.is_dropset,
               rpe: setData.rpe,
+              note: setData.note,
             })
             .eq('id', setId);
 

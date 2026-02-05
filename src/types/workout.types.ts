@@ -21,6 +21,7 @@ export interface SetInput {
   is_dropset?: boolean;
   rpe?: number;
   profile_id?: string; // 누구의 세트인지 (같이 운동할 때)
+  note?: string; // 세트별 메모 (예: "손목 통증 느낌", "그립 변경")
 }
 
 // 운동 카테고리

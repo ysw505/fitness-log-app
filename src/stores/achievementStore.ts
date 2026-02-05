@@ -18,8 +18,9 @@ export interface Badge {
   description: string;
   icon: string;
   requirement: number; // 달성 조건 값
-  type: 'workout_count' | 'streak' | 'volume' | 'pr_count' | 'exercise_variety';
+  type: 'workout_count' | 'streak' | 'volume' | 'pr_count' | 'exercise_variety' | 'single_workout_volume' | 'weekly_volume' | 'category_volume';
   tier: 'bronze' | 'silver' | 'gold' | 'platinum';
+  category?: string; // 카테고리별 배지용
 }
 
 // 사용자가 획득한 배지
@@ -43,10 +44,25 @@ export const BADGES: Badge[] = [
   { id: 'streak_30', name: '1달 연속', description: '30일 연속 운동', icon: '🔥', requirement: 30, type: 'streak', tier: 'gold' },
   { id: 'streak_100', name: '100일 연속', description: '100일 연속 운동', icon: '🔥', requirement: 100, type: 'streak', tier: 'platinum' },
 
-  // 총 볼륨 배지
+  // 총 볼륨 배지 (세분화)
+  { id: 'volume_1k', name: '1톤 클럽', description: '총 1,000kg 들어올림', icon: '🏋️', requirement: 1000, type: 'volume', tier: 'bronze' },
+  { id: 'volume_5k', name: '5톤 클럽', description: '총 5,000kg 들어올림', icon: '🏋️', requirement: 5000, type: 'volume', tier: 'bronze' },
   { id: 'volume_10k', name: '10톤 클럽', description: '총 10,000kg 들어올림', icon: '🏋️', requirement: 10000, type: 'volume', tier: 'bronze' },
+  { id: 'volume_50k', name: '50톤 클럽', description: '총 50,000kg 들어올림', icon: '🏋️', requirement: 50000, type: 'volume', tier: 'silver' },
   { id: 'volume_100k', name: '100톤 클럽', description: '총 100,000kg 들어올림', icon: '🏋️', requirement: 100000, type: 'volume', tier: 'silver' },
-  { id: 'volume_1m', name: '1000톤 클럽', description: '총 1,000,000kg 들어올림', icon: '🏋️', requirement: 1000000, type: 'volume', tier: 'gold' },
+  { id: 'volume_500k', name: '500톤 클럽', description: '총 500,000kg 들어올림', icon: '🏋️', requirement: 500000, type: 'volume', tier: 'gold' },
+  { id: 'volume_1m', name: '1000톤 클럽', description: '총 1,000,000kg 들어올림', icon: '🏋️', requirement: 1000000, type: 'volume', tier: 'platinum' },
+
+  // 단일 운동 볼륨 배지
+  { id: 'single_5k', name: '고강도 운동', description: '1회 운동에서 5,000kg 볼륨', icon: '💥', requirement: 5000, type: 'single_workout_volume', tier: 'bronze' },
+  { id: 'single_10k', name: '파워 세션', description: '1회 운동에서 10,000kg 볼륨', icon: '💥', requirement: 10000, type: 'single_workout_volume', tier: 'silver' },
+  { id: 'single_20k', name: '몬스터 세션', description: '1회 운동에서 20,000kg 볼륨', icon: '💥', requirement: 20000, type: 'single_workout_volume', tier: 'gold' },
+  { id: 'single_30k', name: '전설의 세션', description: '1회 운동에서 30,000kg 볼륨', icon: '💥', requirement: 30000, type: 'single_workout_volume', tier: 'platinum' },
+
+  // 주간 볼륨 배지
+  { id: 'weekly_20k', name: '주간 챌린저', description: '1주일 총 20,000kg 볼륨', icon: '📆', requirement: 20000, type: 'weekly_volume', tier: 'bronze' },
+  { id: 'weekly_50k', name: '주간 워리어', description: '1주일 총 50,000kg 볼륨', icon: '📆', requirement: 50000, type: 'weekly_volume', tier: 'silver' },
+  { id: 'weekly_100k', name: '주간 마스터', description: '1주일 총 100,000kg 볼륨', icon: '📆', requirement: 100000, type: 'weekly_volume', tier: 'gold' },
 
   // PR 배지
   { id: 'pr_5', name: 'PR 헌터', description: '5개 운동 PR 달성', icon: '⭐', requirement: 5, type: 'pr_count', tier: 'bronze' },
@@ -98,6 +114,11 @@ interface AchievementState {
   uniqueExercises: Set<string> | string[]; // persist를 위해 array로 저장
   prCount: number;
 
+  // 볼륨 마일스톤용
+  maxSingleWorkoutVolume: number; // 1회 최대 볼륨
+  thisWeekVolume: number; // 이번 주 볼륨
+  maxWeeklyVolume: number; // 주간 최대 볼륨
+
   // 획득한 배지
   earnedBadges: EarnedBadge[];
 
@@ -115,10 +136,13 @@ interface AchievementState {
   setWeeklyGoal: (goal: number) => void;
   clearNewBadges: () => void;
   getMotivationMessage: (type: keyof typeof MOTIVATION_MESSAGES) => string;
-  checkAndAwardBadges: () => EarnedBadge[];
+  checkAndAwardBadges: (singleWorkoutVolume?: number) => EarnedBadge[];
 
   // 주간 목표 진행률
   getWeeklyProgress: () => { current: number; goal: number; percent: number };
+
+  // 볼륨 마일스톤 진행률
+  getVolumeProgress: () => { total: number; nextMilestone: number; percent: number };
 }
 
 // 날짜만 비교 (시간 무시)
@@ -145,6 +169,9 @@ export const useAchievementStore = create<AchievementState>()(
       totalVolume: 0,
       uniqueExercises: [],
       prCount: 0,
+      maxSingleWorkoutVolume: 0,
+      thisWeekVolume: 0,
+      maxWeeklyVolume: 0,
       earnedBadges: [],
       newBadges: [],
       weeklyGoal: 3, // 기본 주 3회
@@ -153,7 +180,7 @@ export const useAchievementStore = create<AchievementState>()(
 
       recordWorkout: (volume, exerciseIds, isPR) => {
         const today = getDateOnly(new Date());
-        const { lastWorkoutDate, currentStreak, longestStreak, totalWorkouts, totalVolume, uniqueExercises, weekStartDate, thisWeekWorkouts, prCount } = get();
+        const { lastWorkoutDate, currentStreak, longestStreak, totalWorkouts, totalVolume, uniqueExercises, weekStartDate, thisWeekWorkouts, prCount, maxSingleWorkoutVolume, thisWeekVolume, maxWeeklyVolume } = get();
 
         // 스트릭 계산
         let newStreak = currentStreak;
@@ -177,12 +204,18 @@ export const useAchievementStore = create<AchievementState>()(
         // 주간 목표 체크
         const currentWeekStart = getWeekStartDate();
         let weekWorkouts = thisWeekWorkouts;
+        let weekVolume = thisWeekVolume;
+
         if (weekStartDate !== currentWeekStart) {
-          // 새로운 주 시작
+          // 새로운 주 시작 - 리셋
           weekWorkouts = 1;
-        } else if (lastWorkoutDate !== today) {
-          // 같은 주, 새로운 날
-          weekWorkouts = thisWeekWorkouts + 1;
+          weekVolume = volume;
+        } else {
+          // 같은 주
+          if (lastWorkoutDate !== today) {
+            weekWorkouts = thisWeekWorkouts + 1;
+          }
+          weekVolume = thisWeekVolume + volume;
         }
 
         // 유니크 운동 업데이트
@@ -191,6 +224,10 @@ export const useAchievementStore = create<AchievementState>()(
 
         // PR 카운트 업데이트
         const newPRCount = isPR ? prCount + 1 : prCount;
+
+        // 볼륨 마일스톤 업데이트
+        const newMaxSingleWorkoutVolume = Math.max(maxSingleWorkoutVolume, volume);
+        const newMaxWeeklyVolume = Math.max(maxWeeklyVolume, weekVolume);
 
         set({
           currentStreak: newStreak,
@@ -201,11 +238,14 @@ export const useAchievementStore = create<AchievementState>()(
           uniqueExercises: Array.from(exerciseSet),
           weekStartDate: currentWeekStart,
           thisWeekWorkouts: weekWorkouts,
+          thisWeekVolume: weekVolume,
+          maxSingleWorkoutVolume: newMaxSingleWorkoutVolume,
+          maxWeeklyVolume: newMaxWeeklyVolume,
           prCount: newPRCount,
         });
 
-        // 배지 체크
-        return get().checkAndAwardBadges();
+        // 배지 체크 (현재 운동의 볼륨 전달)
+        return get().checkAndAwardBadges(volume);
       },
 
       updatePRCount: (count) => {
@@ -226,10 +266,13 @@ export const useAchievementStore = create<AchievementState>()(
         return messages[Math.floor(Math.random() * messages.length)];
       },
 
-      checkAndAwardBadges: () => {
-        const { currentStreak, totalWorkouts, totalVolume, prCount, uniqueExercises, earnedBadges } = get();
+      checkAndAwardBadges: (singleWorkoutVolume?: number) => {
+        const { currentStreak, totalWorkouts, totalVolume, prCount, uniqueExercises, earnedBadges, maxSingleWorkoutVolume, maxWeeklyVolume, thisWeekVolume } = get();
         const earnedIds = new Set(earnedBadges.map(b => b.badgeId));
         const newlyEarned: EarnedBadge[] = [];
+
+        // 현재 운동 볼륨이 전달되면 그 값 사용, 아니면 최대값 사용
+        const currentSingleVolume = singleWorkoutVolume ?? maxSingleWorkoutVolume;
 
         const values: Record<Badge['type'], number> = {
           workout_count: totalWorkouts,
@@ -237,6 +280,9 @@ export const useAchievementStore = create<AchievementState>()(
           volume: totalVolume,
           pr_count: prCount,
           exercise_variety: Array.isArray(uniqueExercises) ? uniqueExercises.length : 0,
+          single_workout_volume: currentSingleVolume,
+          weekly_volume: Math.max(maxWeeklyVolume, thisWeekVolume),
+          category_volume: 0, // 카테고리별 볼륨은 별도로 추적 필요 (향후 확장)
         };
 
         BADGES.forEach(badge => {
@@ -270,6 +316,26 @@ export const useAchievementStore = create<AchievementState>()(
 
         return { current, goal: weeklyGoal, percent };
       },
+
+      getVolumeProgress: () => {
+        const { totalVolume, earnedBadges } = get();
+
+        // 볼륨 마일스톤 배지들
+        const volumeMilestones = [1000, 5000, 10000, 50000, 100000, 500000, 1000000];
+
+        // 다음 마일스톤 찾기
+        const nextMilestone = volumeMilestones.find(m => m > totalVolume) || volumeMilestones[volumeMilestones.length - 1];
+
+        // 이전 마일스톤 (진행률 계산용)
+        const prevMilestone = volumeMilestones.filter(m => m <= totalVolume).pop() || 0;
+
+        // 현재 구간 내에서의 진행률
+        const rangeTotal = nextMilestone - prevMilestone;
+        const rangeProgress = totalVolume - prevMilestone;
+        const percent = rangeTotal > 0 ? Math.min(100, Math.round((rangeProgress / rangeTotal) * 100)) : 100;
+
+        return { total: totalVolume, nextMilestone, percent };
+      },
     }),
     {
       name: 'achievement-storage',
@@ -282,6 +348,9 @@ export const useAchievementStore = create<AchievementState>()(
         totalVolume: state.totalVolume,
         uniqueExercises: state.uniqueExercises,
         prCount: state.prCount,
+        maxSingleWorkoutVolume: state.maxSingleWorkoutVolume,
+        thisWeekVolume: state.thisWeekVolume,
+        maxWeeklyVolume: state.maxWeeklyVolume,
         earnedBadges: state.earnedBadges,
         weeklyGoal: state.weeklyGoal,
         thisWeekWorkouts: state.thisWeekWorkouts,

@@ -229,6 +229,7 @@ export interface Database {
           is_warmup: boolean;
           is_dropset: boolean;
           rpe: number | null;
+          note: string | null;
           completed_at: string;
           created_at: string;
         };
@@ -243,6 +244,7 @@ export interface Database {
           is_warmup?: boolean;
           is_dropset?: boolean;
           rpe?: number | null;
+          note?: string | null;
           completed_at?: string;
           created_at?: string;
         };
@@ -257,6 +259,7 @@ export interface Database {
           is_warmup?: boolean;
           is_dropset?: boolean;
           rpe?: number | null;
+          note?: string | null;
           completed_at?: string;
           created_at?: string;
         };

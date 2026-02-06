@@ -1,46 +1,68 @@
 import { Platform } from 'react-native';
-import { supabase } from './supabase';
+import * as FileSystem from 'expo-file-system';
 
 const GITHUB_OWNER = 'ysw505';
 const GITHUB_REPO = 'fitness-log-app';
 const GITHUB_TOKEN = process.env.EXPO_PUBLIC_GITHUB_TOKEN;
 
 /**
- * 이미지를 Supabase Storage에 업로드하고 공개 URL 반환
+ * 이미지를 base64로 변환
  */
-async function uploadImageToStorage(uri: string, index: number): Promise<string | null> {
+async function imageToBase64(uri: string): Promise<string> {
+  if (Platform.OS === 'web') {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        const base64 = dataUrl.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } else {
+    // 네이티브: expo-file-system으로 안정적 base64 변환
+    const base64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return base64;
+  }
+}
+
+/**
+ * 이미지를 GitHub 레포에 업로드하고 raw URL 반환
+ */
+async function uploadImageToGitHub(uri: string, index: number): Promise<string | null> {
   try {
     const timestamp = Date.now();
-    const fileName = `feedback/${timestamp}-${index}.jpg`;
+    const fileName = `feedback-images/${timestamp}-${index}.jpg`;
+    const base64Content = await imageToBase64(uri);
 
-    if (Platform.OS === 'web') {
-      // 웹: fetch로 blob 변환 후 업로드
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const { error } = await supabase.storage
-        .from('feedback-images')
-        .upload(fileName, blob, { contentType: 'image/jpeg' });
-      if (error) throw error;
-    } else {
-      // 네이티브: FormData로 업로드
-      const formData = new FormData();
-      formData.append('file', {
-        uri,
-        name: `${timestamp}-${index}.jpg`,
-        type: 'image/jpeg',
-      } as any);
+    const response = await fetch(
+      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${fileName}`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${GITHUB_TOKEN}`,
+          Accept: 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: `feedback image ${timestamp}-${index}`,
+          content: base64Content,
+        }),
+      },
+    );
 
-      const { error } = await supabase.storage
-        .from('feedback-images')
-        .upload(fileName, formData, { contentType: 'multipart/form-data' });
-      if (error) throw error;
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || `HTTP ${response.status}`);
     }
 
-    const { data } = supabase.storage
-      .from('feedback-images')
-      .getPublicUrl(fileName);
-
-    return data.publicUrl;
+    const data = await response.json();
+    return data.content.download_url;
   } catch (error) {
     console.error('이미지 업로드 실패:', error);
     return null;
@@ -63,7 +85,7 @@ export async function submitFeedback(
     // 1. 이미지 업로드
     const imageUrls: string[] = [];
     for (let i = 0; i < imageUris.length; i++) {
-      const url = await uploadImageToStorage(imageUris[i], i);
+      const url = await uploadImageToGitHub(imageUris[i], i);
       if (url) imageUrls.push(url);
     }
 

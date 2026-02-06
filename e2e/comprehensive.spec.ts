@@ -245,9 +245,9 @@ test.describe('4. 세트 추가/삭제', () => {
         await weightInput.fill('60');
         await repsInput.fill('10');
 
-        // + 버튼 클릭
-        const plusBtn = page.getByText('+', { exact: true }).last();
-        await plusBtn.click();
+        // 세트 추가 버튼 클릭
+        const addSetBtn = page.getByText('세트 추가');
+        await addSetBtn.click();
         await page.waitForTimeout(1000);
 
         // 휴식 스킵
@@ -428,8 +428,8 @@ test.describe('9. 전체 운동 플로우', () => {
         await weightInput.fill(String(60 + i * 5)); // 60, 65
         await repsInput.fill(String(10 - i)); // 10, 9
 
-        const plusBtn = page.getByText('+', { exact: true }).last();
-        await plusBtn.click();
+        const addSetBtn2 = page.getByText('세트 추가');
+        await addSetBtn2.click();
         await page.waitForTimeout(500);
 
         // RPE 피커가 나타나면 건너뛰기
@@ -630,4 +630,98 @@ test.describe('12. 다크 테마 전체 화면', () => {
 
     console.log('다크 모드 전체 화면 테스트 성공');
   });
+});
+
+test.describe('13. 모바일 뷰포트 UI 오버플로우 검증', () => {
+  const mobileViewports = [
+    { name: 'small-android', width: 360, height: 640 },   // Galaxy S7 등 구형
+    { name: 'medium-android', width: 393, height: 851 },  // Pixel 5
+    { name: 'large-android', width: 412, height: 915 },   // Galaxy S24
+  ];
+
+  for (const vp of mobileViewports) {
+    test(`${vp.name} (${vp.width}px)에서 운동 입력 행이 잘리지 않음`, async ({ page }) => {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await page.goto('/');
+      await page.waitForLoadState('networkidle');
+
+      // 운동 시작
+      const emptyWorkoutBtn = page.getByText('빈 운동');
+      const smartRecCard = page.locator('text=탭하여 바로 시작');
+
+      if (await emptyWorkoutBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await emptyWorkoutBtn.click();
+      } else if (await smartRecCard.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await smartRecCard.click();
+      } else {
+        console.log('운동 시작 버튼을 찾을 수 없음, 건너뜀');
+        return;
+      }
+
+      // 운동 중 화면
+      await page.waitForURL('**/workout/active', { timeout: 10000 });
+      await page.waitForTimeout(500);
+
+      // 운동 추가
+      const addExerciseButton = page.getByText('운동 추가');
+      if (await addExerciseButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await addExerciseButton.click();
+      }
+
+      await page.waitForURL('**/workout/exercises', { timeout: 10000 });
+      await page.waitForTimeout(500);
+
+      // 운동 선택
+      const benchPress = page.getByText('벤치프레스').first();
+      if (await benchPress.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await benchPress.click();
+      } else {
+        const firstExercise = page.locator('[data-testid="exercise-item"]').first();
+        if (await firstExercise.isVisible({ timeout: 3000 }).catch(() => false)) {
+          await firstExercise.click();
+        }
+      }
+
+      await page.waitForURL('**/workout/active', { timeout: 10000 });
+      await page.waitForTimeout(1000);
+
+      // 컴팩트 입력 행의 오버플로우 검증
+      // 입력 필드가 뷰포트 안에 있는지 확인
+      const weightInput = page.locator('input[placeholder="0"]').first();
+      if (await weightInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+        const inputBox = await weightInput.boundingBox();
+        if (inputBox) {
+          // 입력 필드가 화면 오른쪽을 넘지 않는지 확인
+          expect(inputBox.x + inputBox.width).toBeLessThanOrEqual(vp.width);
+          console.log(`${vp.name}: 무게 입력 필드 위치 OK (right: ${inputBox.x + inputBox.width}px / ${vp.width}px)`);
+        }
+      }
+
+      // 횟수 입력 필드도 확인
+      const repsInput = page.locator('input[placeholder="0"]').nth(1);
+      if (await repsInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+        const repsBox = await repsInput.boundingBox();
+        if (repsBox) {
+          expect(repsBox.x + repsBox.width).toBeLessThanOrEqual(vp.width);
+          console.log(`${vp.name}: 횟수 입력 필드 위치 OK (right: ${repsBox.x + repsBox.width}px / ${vp.width}px)`);
+        }
+      }
+
+      // 세트 추가 버튼이 화면 안에 있는지 확인
+      const addSetBtnCheck = page.getByText('세트 추가');
+      if (await addSetBtnCheck.isVisible({ timeout: 3000 }).catch(() => false)) {
+        const btnBox = await addSetBtnCheck.boundingBox();
+        if (btnBox) {
+          expect(btnBox.x + btnBox.width).toBeLessThanOrEqual(vp.width);
+          console.log(`${vp.name}: 세트 추가 버튼 위치 OK (right: ${btnBox.x + btnBox.width}px / ${vp.width}px)`);
+        }
+      }
+
+      await page.screenshot({
+        path: `e2e/screenshots/comprehensive/13-mobile-${vp.name}.png`,
+        fullPage: true,
+      });
+      console.log(`${vp.name} 뷰포트 오버플로우 테스트 통과`);
+    });
+  }
 });

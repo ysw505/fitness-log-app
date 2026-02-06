@@ -226,10 +226,10 @@ export default function ExercisesScreen() {
     }
   };
 
-  // 카테고리 아이콘 가져오기
-  const getCategoryIcon = (categoryId: string): string => {
+  // 카테고리 첫 글자 가져오기
+  const getCategoryInitial = (categoryId: string): string => {
     const category = EXERCISE_CATEGORIES.find((c) => c.id === categoryId);
-    return (category as any)?.icon || '🏋️';
+    return category?.name?.charAt(0) || '운';
   };
 
   return (
@@ -307,7 +307,7 @@ export default function ExercisesScreen() {
                 style={[styles.exerciseItem, dynamicStyles.card]}
                 onPress={() => handleExercisePress(exercise)}
               >
-                <Text style={styles.exerciseIcon}>{getCategoryIcon(exercise.category)}</Text>
+                <Text style={styles.exerciseIcon}>{getCategoryInitial(exercise.category)}</Text>
                 <RNView style={styles.exerciseInfo}>
                   <Text style={[styles.exerciseName, dynamicStyles.text]}>
                     {exercise.name_ko || exercise.name}
@@ -387,7 +387,7 @@ export default function ExercisesScreen() {
                 style={[styles.exerciseItem, dynamicStyles.card]}
                 onPress={() => handleExercisePress(exercise)}
               >
-                <Text style={styles.exerciseIcon}>{getCategoryIcon(exercise.category)}</Text>
+                <Text style={styles.exerciseIcon}>{getCategoryInitial(exercise.category)}</Text>
                 <RNView style={styles.exerciseInfo}>
                   <RNView style={styles.exerciseNameRow}>
                     <Text style={[styles.exerciseName, dynamicStyles.text]}>
@@ -479,7 +479,7 @@ export default function ExercisesScreen() {
               <>
                 {/* 운동 정보 */}
                 <RNView style={styles.actionModalHeader}>
-                  <Text style={styles.actionModalIcon}>{getCategoryIcon(selectedExercise.category)}</Text>
+                  <Text style={styles.actionModalIcon}>{getCategoryInitial(selectedExercise.category)}</Text>
                   <RNView style={styles.actionModalTitleContainer}>
                     <Text style={[styles.actionModalTitle, dynamicStyles.text]}>
                       {selectedExercise.name_ko || selectedExercise.name}
@@ -557,7 +557,7 @@ export default function ExercisesScreen() {
 
                     {/* 팁 */}
                     <RNView style={styles.guideTipsSection}>
-                      <Text style={[styles.guideTipsTitle, dynamicStyles.text]}>💡 수행 팁</Text>
+                      <Text style={[styles.guideTipsTitle, dynamicStyles.text]}>수행 팁</Text>
                       {EXERCISE_GUIDES[selectedExercise.id].tips.slice(0, 3).map((tip, idx) => (
                         <Text key={idx} style={[styles.guideTipItem, dynamicStyles.textSecondary]}>
                           • {tip}
@@ -567,7 +567,7 @@ export default function ExercisesScreen() {
 
                     {/* 흔한 실수 */}
                     <RNView style={styles.guideMistakesSection}>
-                      <Text style={[styles.guideMistakesTitle, dynamicStyles.text]}>⚠️ 주의할 점</Text>
+                      <Text style={[styles.guideMistakesTitle, dynamicStyles.text]}>주의할 점</Text>
                       {EXERCISE_GUIDES[selectedExercise.id].commonMistakes.slice(0, 2).map((mistake, idx) => (
                         <Text key={idx} style={[styles.guideMistakeItem, dynamicStyles.textTertiary]}>
                           • {mistake}
@@ -731,7 +731,7 @@ export default function ExercisesScreen() {
 
             {/* 도움말 */}
             <RNView style={[styles.helpBox, dynamicStyles.cardSecondary]}>
-              <Text style={[styles.helpTitle, dynamicStyles.text]}>💡 팁</Text>
+              <Text style={[styles.helpTitle, dynamicStyles.text]}>팁</Text>
               <Text style={[styles.helpText, dynamicStyles.textSecondary]}>
                 타바타, HIIT, 유산소, 스트레칭 등 헬스장 운동 외에도{'\n'}
                 자유롭게 운동을 추가할 수 있습니다.

@@ -244,7 +244,7 @@ export default function HistoryScreen() {
         <Text style={[styles.prExercise, dynamicStyles.text]}>
           {item.exercise_name_ko || item.exercise_name}
         </Text>
-        <Text style={styles.prBadge}>🏆</Text>
+        <Text style={[styles.prBadge, { color: colors.primary }]}>PR</Text>
       </RNView>
       <RNView style={styles.prStats}>
         <RNView style={styles.prStatItem}>
@@ -344,8 +344,7 @@ export default function HistoryScreen() {
     <RNView style={styles.tabContent}>
       {personalRecords.length === 0 ? (
         <RNView style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>🎯</Text>
-          <Text style={[styles.emptyText, dynamicStyles.text]}>첫 번째 기록을 세워보세요!</Text>
+          <Text style={[styles.emptyText, dynamicStyles.text]}>첫 번째 기록을 세워보세요</Text>
           <Text style={[styles.emptySubtext, dynamicStyles.textSecondary]}>
             운동을 하면 자동으로 최고 기록이 저장돼요
           </Text>
@@ -370,11 +369,11 @@ export default function HistoryScreen() {
 
   // 이번 주 vs 지난 주 변화량 계산
   const getChangeIndicator = (current: number, previous: number) => {
-    if (previous === 0) return current > 0 ? '🔥 NEW' : '';
+    if (previous === 0) return current > 0 ? 'NEW' : '';
     const change = ((current - previous) / previous) * 100;
-    if (change > 0) return `↑ ${Math.round(change)}%`;
-    if (change < 0) return `↓ ${Math.abs(Math.round(change))}%`;
-    return '→ 유지';
+    if (change > 0) return `+${Math.round(change)}%`;
+    if (change < 0) return `${Math.round(change)}%`;
+    return '유지';
   };
 
   // 통계 탭
@@ -507,7 +506,7 @@ export default function HistoryScreen() {
             <Text style={styles.totalSummaryLabel}>이번 달 운동일</Text>
           </RNView>
           <RNView style={styles.totalSummaryItem}>
-            <Text style={styles.totalSummaryValue}>{streak > 0 ? `🔥${streak}` : '-'}</Text>
+            <Text style={styles.totalSummaryValue}>{streak > 0 ? streak : '-'}</Text>
             <Text style={styles.totalSummaryLabel}>연속 일수</Text>
           </RNView>
         </RNView>
@@ -692,8 +691,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   prValue: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '600',
   },
   prLabel: {
     fontSize: 11,
@@ -736,8 +735,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   comparisonMainValue: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '600',
   },
   comparisonChange: {
     fontSize: 12,
@@ -815,8 +814,8 @@ const styles = StyleSheet.create({
   },
   totalSummaryValue: {
     color: '#fff',
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '600',
   },
   totalSummaryLabel: {
     color: 'rgba(255, 255, 255, 0.8)',

@@ -213,7 +213,6 @@ export default function StatsScreen() {
     return (
       <ScrollView style={[styles.container, dynamicStyles.container]}>
         <RNView style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>📊</Text>
           <Text style={[styles.emptyTitle, dynamicStyles.text]}>아직 운동 기록이 없어요</Text>
           <Text style={[styles.emptySubtitle, dynamicStyles.textSecondary]}>
             운동을 시작하면 여기서{'\n'}통계를 확인할 수 있어요
@@ -230,28 +229,24 @@ export default function StatsScreen() {
         <RNView style={styles.summaryCards}>
           {/* 스트릭 */}
           <RNView style={[styles.summaryCard, dynamicStyles.card]}>
-            <Text style={styles.summaryIcon}>🔥</Text>
             <Text style={[styles.summaryValue, dynamicStyles.text]}>{streak}</Text>
             <Text style={[styles.summaryLabel, dynamicStyles.textSecondary]}>연속 일</Text>
           </RNView>
 
           {/* 이번 주 운동 */}
           <RNView style={[styles.summaryCard, dynamicStyles.card]}>
-            <Text style={styles.summaryIcon}>📅</Text>
             <Text style={[styles.summaryValue, dynamicStyles.text]}>{weeklyStats.workoutCount}</Text>
             <Text style={[styles.summaryLabel, dynamicStyles.textSecondary]}>이번 주</Text>
           </RNView>
 
           {/* 전체 운동 */}
           <RNView style={[styles.summaryCard, dynamicStyles.card]}>
-            <Text style={[styles.summaryIcon, { fontWeight: '700' }]}>Σ</Text>
             <Text style={[styles.summaryValue, dynamicStyles.text]}>{totalWorkouts}</Text>
             <Text style={[styles.summaryLabel, dynamicStyles.textSecondary]}>전체</Text>
           </RNView>
 
           {/* 평균 시간 */}
           <RNView style={[styles.summaryCard, dynamicStyles.card]}>
-            <Text style={styles.summaryIcon}>⏱️</Text>
             <Text style={[styles.summaryValue, dynamicStyles.text]}>{avgDuration}</Text>
             <Text style={[styles.summaryLabel, dynamicStyles.textSecondary]}>평균(분)</Text>
           </RNView>
@@ -389,7 +384,7 @@ export default function StatsScreen() {
         {/* 개인 기록 (PR) */}
         {personalRecords.length > 0 && (
           <RNView style={styles.section}>
-            <Text style={[styles.sectionTitle, dynamicStyles.text]}>개인 기록 (PR) 🏆</Text>
+            <Text style={[styles.sectionTitle, dynamicStyles.text]}>개인 기록</Text>
             <RNView style={[styles.prList, dynamicStyles.card]}>
               {personalRecords.slice(0, 5).map((pr, index) => (
                 <RNView
@@ -616,7 +611,7 @@ export default function StatsScreen() {
                           <Text style={[styles.recordWeight, dynamicStyles.text]}>
                             {record.max_weight}kg × {avgReps}회
                           </Text>
-                          {isPR && <Text style={styles.prBadge}>🔥PR</Text>}
+                          {isPR && <Text style={[styles.prBadge, { color: colors.primary }]}>PR</Text>}
                         </RNView>
                         <Text style={[styles.record1RM, dynamicStyles.textTertiary]}>
                           1RM: {est1RM}kg
@@ -689,7 +684,7 @@ const styles = StyleSheet.create({
   },
   summaryValue: {
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   summaryLabel: {
     fontSize: 11,
@@ -708,7 +703,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
     marginBottom: 12,
   },
   changeBadge: {
@@ -743,7 +738,7 @@ const styles = StyleSheet.create({
   },
   weeklyCompactValue: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   weeklyCompactVolume: {
     fontSize: 14,
@@ -768,7 +763,7 @@ const styles = StyleSheet.create({
   weeklyDotCheck: {
     color: '#ffffff',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   weeklyDotLabel: {
     fontSize: 12,
@@ -857,7 +852,7 @@ const styles = StyleSheet.create({
   },
   prWeight: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   prReps: {
     fontSize: 13,
@@ -912,7 +907,7 @@ const styles = StyleSheet.create({
   },
   current1RMValue: {
     fontSize: 28,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   progressBadge: {
     paddingHorizontal: 10,
@@ -1019,7 +1014,7 @@ const styles = StyleSheet.create({
   },
   exerciseStatValue: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   exerciseStatLabel: {
     fontSize: 12,

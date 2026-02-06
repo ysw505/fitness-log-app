@@ -23,7 +23,6 @@ interface SplitOption {
   nameEn: string;
   description: string;
   categories: string[];
-  icon: string;
 }
 
 // 과학적 운동 분할 정의
@@ -34,7 +33,6 @@ const WORKOUT_SPLITS: SplitOption[] = [
     nameEn: 'Push',
     description: '가슴, 어깨, 삼두',
     categories: ['chest', 'shoulders', 'arms'],
-    icon: '🫸',
   },
   {
     id: 'pull',
@@ -42,7 +40,6 @@ const WORKOUT_SPLITS: SplitOption[] = [
     nameEn: 'Pull',
     description: '등, 이두',
     categories: ['back', 'arms'],
-    icon: '🫷',
   },
   {
     id: 'legs',
@@ -50,7 +47,6 @@ const WORKOUT_SPLITS: SplitOption[] = [
     nameEn: 'Legs',
     description: '하체, 코어',
     categories: ['legs', 'core'],
-    icon: '🦵',
   },
   {
     id: 'upper',
@@ -58,7 +54,6 @@ const WORKOUT_SPLITS: SplitOption[] = [
     nameEn: 'Upper',
     description: '가슴, 등, 어깨, 팔',
     categories: ['chest', 'back', 'shoulders', 'arms'],
-    icon: '🏋️',
   },
   {
     id: 'lower',
@@ -66,7 +61,6 @@ const WORKOUT_SPLITS: SplitOption[] = [
     nameEn: 'Lower',
     description: '하체, 코어',
     categories: ['legs', 'core'],
-    icon: '🦿',
   },
   {
     id: 'custom',
@@ -74,7 +68,6 @@ const WORKOUT_SPLITS: SplitOption[] = [
     nameEn: 'Custom',
     description: '원하는 부위 선택',
     categories: [],
-    icon: '⚙️',
   },
 ];
 
@@ -479,7 +472,6 @@ export default function SmartWorkoutScreen() {
                   style={[styles.splitCard, dynamicStyles.card]}
                   onPress={() => handleSplitSelect(split)}
                 >
-                  <Text style={styles.splitIcon}>{split.icon}</Text>
                   <Text style={[styles.splitName, dynamicStyles.text]}>{split.name}</Text>
                   <Text style={[styles.splitNameEn, dynamicStyles.textTertiary]}>
                     {split.nameEn}

@@ -12,16 +12,16 @@ import { useSmartRecommendation } from '@/hooks/useSmartRecommendation';
 
 // 초보자 팁 데이터
 const BEGINNER_TIPS = [
-  { icon: '💪', tip: '운동 전 5-10분 워밍업으로 부상을 예방하세요', category: '안전' },
-  { icon: '📈', tip: '처음엔 가벼운 무게로 자세를 익히는 게 중요해요', category: '시작' },
-  { icon: '🔄', tip: '같은 부위는 48-72시간 휴식을 주세요', category: '회복' },
-  { icon: '📝', tip: '매 운동을 기록하면 성장을 눈으로 확인할 수 있어요', category: '기록' },
-  { icon: '🎯', tip: 'RPE 7-8 정도로 운동하면 안전하게 성장할 수 있어요', category: '강도' },
-  { icon: '🥗', tip: '단백질은 체중 kg당 1.6-2.2g이 근육 성장에 좋아요', category: '영양' },
-  { icon: '😴', tip: '수면은 근육 회복의 핵심! 7-9시간을 목표로 해요', category: '회복' },
-  { icon: '🏋️', tip: '복합 운동(스쿼트, 데드리프트)이 효율적이에요', category: '운동' },
-  { icon: '⏱️', tip: '세트 사이 2-3분 휴식이 근력 운동에 적합해요', category: '휴식' },
-  { icon: '📅', tip: '일주일에 3-4회 운동이 초보자에게 적당해요', category: '빈도' },
+  { tip: '운동 전 5-10분 워밍업으로 부상을 예방하세요', category: '안전' },
+  { tip: '처음엔 가벼운 무게로 자세를 익히는 게 중요해요', category: '시작' },
+  { tip: '같은 부위는 48-72시간 휴식을 주세요', category: '회복' },
+  { tip: '매 운동을 기록하면 성장을 눈으로 확인할 수 있어요', category: '기록' },
+  { tip: 'RPE 7-8 정도로 운동하면 안전하게 성장할 수 있어요', category: '강도' },
+  { tip: '단백질은 체중 kg당 1.6-2.2g이 근육 성장에 좋아요', category: '영양' },
+  { tip: '수면은 근육 회복의 핵심! 7-9시간을 목표로 해요', category: '회복' },
+  { tip: '복합 운동(스쿼트, 데드리프트)이 효율적이에요', category: '운동' },
+  { tip: '세트 사이 2-3분 휴식이 근력 운동에 적합해요', category: '휴식' },
+  { tip: '일주일에 3-4회 운동이 초보자에게 적당해요', category: '빈도' },
 ];
 
 export default function HomeScreen() {
@@ -364,10 +364,7 @@ export default function HomeScreen() {
       {isBeginnerUser && showTipBanner && !activeSession && (
         <RNView style={[styles.tipBanner, dynamicStyles.card]}>
           <RNView style={styles.tipBannerHeader}>
-            <RNView style={styles.tipBadgeRow}>
-              <Text style={styles.tipBadgeIcon}>💡</Text>
-              <Text style={[styles.tipBadgeText, dynamicStyles.primary]}>초보자 팁</Text>
-            </RNView>
+            <Text style={[styles.tipBadgeText, dynamicStyles.textSecondary]}>팁</Text>
             <Pressable
               style={[styles.tipDismissBtn, dynamicStyles.cardSecondary]}
               onPress={() => setShowTipBanner(false)}
@@ -377,9 +374,8 @@ export default function HomeScreen() {
             </Pressable>
           </RNView>
           <RNView style={styles.tipContent}>
-            <Text style={styles.tipIcon}>{currentTip.icon}</Text>
             <RNView style={styles.tipTextContainer}>
-              <Text style={[styles.tipCategoryLabel, { color: colors.primary }]}>{currentTip.category}</Text>
+              <Text style={[styles.tipCategoryLabel, dynamicStyles.textTertiary]}>{currentTip.category}</Text>
               <Text style={[styles.tipText, dynamicStyles.text]}>{currentTip.tip}</Text>
             </RNView>
           </RNView>
@@ -435,21 +431,21 @@ export default function HomeScreen() {
           {/* 빠른 시작 버튼들 */}
           <RNView style={styles.quickStartRow}>
             <Pressable
-              style={[styles.quickStartButton, dynamicStyles.card]}
+              style={[styles.quickStartButton, dynamicStyles.card, { borderColor: colors.border, borderWidth: 1 }]}
               onPress={handleStartWorkout}
               disabled={isLoading}
             >
-              <Text style={[styles.quickStartIcon]}>📝</Text>
               <Text style={[styles.quickStartText, dynamicStyles.text]}>
                 {isLoading ? '시작 중...' : '빈 운동'}
               </Text>
+              <Text style={[styles.quickStartSubtext, dynamicStyles.textTertiary]}>직접 구성</Text>
             </Pressable>
             <Pressable
-              style={[styles.quickStartButton, dynamicStyles.card]}
+              style={[styles.quickStartButton, dynamicStyles.card, { borderColor: colors.border, borderWidth: 1 }]}
               onPress={() => router.push('/workout/smart-workout')}
             >
-              <Text style={[styles.quickStartIcon]}>🎯</Text>
               <Text style={[styles.quickStartText, dynamicStyles.text]}>직접 선택</Text>
+              <Text style={[styles.quickStartSubtext, dynamicStyles.textTertiary]}>운동 고르기</Text>
             </Pressable>
           </RNView>
         </RNView>
@@ -489,10 +485,9 @@ export default function HomeScreen() {
 
       {/* 스트릭 배너 (3일 이상일 때만 표시) */}
       {currentStreak >= 3 && (
-        <RNView style={[styles.streakBanner, dynamicStyles.card]}>
-          <Text style={styles.streakBannerIcon}>🔥</Text>
+        <RNView style={[styles.streakBanner, dynamicStyles.card, { borderLeftWidth: 3, borderLeftColor: colors.primary }]}>
           <Text style={[styles.streakBannerText, dynamicStyles.text]}>
-            {currentStreak}일 연속 운동 중!
+            {currentStreak}일 연속 운동 중
           </Text>
           {longestStreak > currentStreak && (
             <Text style={[styles.streakBannerBest, dynamicStyles.textSecondary]}>
@@ -536,12 +531,12 @@ export default function HomeScreen() {
         {/* 긍정적 메시지 */}
         <Text style={[styles.weeklyGoalMessage, dynamicStyles.textSecondary]}>
           {weeklyProgress.percent >= 100
-            ? '이번 주 목표 달성! 🎉'
+            ? '이번 주 목표 달성'
             : weeklyProgress.current === 0
             ? '첫 운동을 시작해볼까요?'
             : weeklyProgress.goal - weeklyProgress.current === 1
-            ? '목표까지 딱 1번!'
-            : `목표까지 ${weeklyProgress.goal - weeklyProgress.current}번 남았어요`}
+            ? '목표까지 1회 남음'
+            : `목표까지 ${weeklyProgress.goal - weeklyProgress.current}회 남음`}
         </Text>
       </Pressable>
 
@@ -661,7 +656,7 @@ export default function HomeScreen() {
           }}
         >
           <RNView style={[styles.badgeModalContent, dynamicStyles.card]}>
-            <Text style={styles.badgeModalTitle}>🎉 새 배지 획득!</Text>
+            <Text style={[styles.badgeModalTitle, dynamicStyles.text]}>새 배지 획득</Text>
             {newBadges.map((earned) => {
               const badge = getBadgeById(earned.badgeId);
               if (!badge) return null;
@@ -732,12 +727,7 @@ const styles = StyleSheet.create({
   // 스마트 추천 카드
   smartRecommendationCard: {
     padding: 20,
-    borderRadius: 20,
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+    borderRadius: 16,
   },
   smartRecHeader: {
     flexDirection: 'row',
@@ -746,23 +736,23 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   smartRecBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    fontSize: 12,
-    fontWeight: '700',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    fontSize: 11,
+    fontWeight: '500',
     color: '#fff',
     overflow: 'hidden',
   },
   smartRecReason: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontWeight: '400',
   },
   smartRecTitle: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '600',
     color: '#fff',
     marginBottom: 6,
   },
@@ -796,32 +786,22 @@ const styles = StyleSheet.create({
   quickStartButton: {
     flex: 1,
     padding: 16,
-    borderRadius: 16,
+    borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  quickStartIcon: {
-    fontSize: 24,
-    marginBottom: 6,
   },
   quickStartText: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  quickStartSubtext: {
+    fontSize: 12,
+    marginTop: 2,
   },
 
   // 진행 중인 운동 카드
   activeCard: {
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
   },
   activeCardHeader: {
     flexDirection: 'row',
@@ -835,37 +815,37 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   activeCardLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
   },
   liveBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.2)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
     gap: 4,
   },
   liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: '#ef4444',
   },
   liveText: {
     color: '#ef4444',
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: '500',
   },
   elapsedTime: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },
   activeCardTitle: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '600',
     marginBottom: 16,
   },
 
@@ -916,8 +896,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   activeCardStatValue: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '600',
   },
   activeCardStatLabel: {
     fontSize: 12,
@@ -961,17 +941,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
-    borderRadius: 12,
+    borderRadius: 8,
     marginTop: 20,
-    gap: 8,
-  },
-  streakBannerIcon: {
-    fontSize: 20,
   },
   streakBannerText: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '500',
   },
   streakBannerBest: {
     fontSize: 12,
@@ -981,7 +957,7 @@ const styles = StyleSheet.create({
   weeklyGoalSection: {
     marginTop: 20,
     padding: 16,
-    borderRadius: 16,
+    borderRadius: 12,
   },
   weeklyGoalHeader: {
     flexDirection: 'row',
@@ -990,12 +966,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   weeklyGoalTitle: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '500',
   },
   weeklyGoalEdit: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '400',
   },
   weeklyGoalContent: {
     flexDirection: 'row',
@@ -1003,8 +979,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   weeklyGoalValue: {
-    fontSize: 36,
-    fontWeight: '700',
+    fontSize: 32,
+    fontWeight: '600',
   },
   weeklyGoalDivider: {
     fontSize: 24,
@@ -1030,7 +1006,7 @@ const styles = StyleSheet.create({
 
   // 섹션 공통
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     marginBottom: 16,
   },
@@ -1043,16 +1019,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
+    padding: 14,
+    borderRadius: 10,
     marginBottom: 8,
   },
   recentWorkoutInfo: {
     flex: 1,
   },
   recentWorkoutName: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '500',
   },
   recentWorkoutDate: {
     fontSize: 13,
@@ -1110,8 +1086,8 @@ const styles = StyleSheet.create({
     maxWidth: 360,
   },
   modalTitle: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '600',
     textAlign: 'center',
     marginBottom: 8,
   },
@@ -1230,14 +1206,9 @@ const styles = StyleSheet.create({
 
   // 초보자 팁 배너
   tipBanner: {
-    borderRadius: 16,
+    borderRadius: 10,
     padding: 16,
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
   },
   tipBannerHeader: {
     flexDirection: 'row',

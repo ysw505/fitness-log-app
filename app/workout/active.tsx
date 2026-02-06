@@ -11,6 +11,7 @@ import {
   AppStateStatus,
   Modal,
   ScrollView,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { router } from 'expo-router';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
@@ -251,10 +252,9 @@ const PreviousRecordInfo = ({ prevSets, personalRecord, colors }: PreviousRecord
       )}
       {/* PR 배지 */}
       {personalRecord && personalRecord.max_weight > 0 && (
-        <RNView style={[styles.prBadge, { backgroundColor: colors.primary + '15' }]}>
-          <Text style={[styles.prBadgeIcon]}>🏆</Text>
+        <RNView style={[styles.prBadge, { backgroundColor: colors.primary + '10' }]}>
           <Text style={[styles.prBadgeText, { color: colors.primary }]}>
-            PR {personalRecord.max_weight}kg×{personalRecord.max_reps_at_weight}
+            PR {personalRecord.max_weight}kg × {personalRecord.max_reps_at_weight}
           </Text>
         </RNView>
       )}
@@ -845,16 +845,14 @@ export default function ActiveWorkoutScreen() {
             <RNView style={styles.inlineStatsRow}>
               {/* 운동 횟수 */}
               <RNView style={[styles.inlineStatBadge, dynamicStyles.cardSecondary]}>
-                <Text style={[styles.inlineStatIcon]}>📊</Text>
                 <Text style={[styles.inlineStatText, dynamicStyles.textSecondary]}>{records.length}회 운동</Text>
               </RNView>
 
               {/* 역대 최고 무게 */}
               {exercisePR && exercisePR.max_weight > 0 && (
                 <RNView style={[styles.inlineStatBadge, dynamicStyles.cardSecondary]}>
-                  <Text style={[styles.inlineStatIcon]}>🏆</Text>
                   <Text style={[styles.inlineStatText, dynamicStyles.textSecondary]}>
-                    최고 {exercisePR.max_weight}kg×{exercisePR.max_reps_at_weight}
+                    PR {exercisePR.max_weight}kg × {exercisePR.max_reps_at_weight}
                   </Text>
                 </RNView>
               )}
@@ -869,8 +867,7 @@ export default function ActiveWorkoutScreen() {
                 if (Math.abs(percent) >= 5) {
                   const isUp = diff > 0;
                   return (
-                    <RNView style={[styles.inlineStatBadge, { backgroundColor: isUp ? '#22c55e15' : '#ef444415' }]}>
-                      <Text style={[styles.inlineStatIcon]}>{isUp ? '📈' : '📉'}</Text>
+                    <RNView style={[styles.inlineStatBadge, { backgroundColor: isUp ? '#22c55e10' : '#ef444410' }]}>
                       <Text style={[styles.inlineStatText, { color: isUp ? '#22c55e' : '#ef4444' }]}>
                         {isUp ? '+' : ''}{percent}%
                       </Text>
@@ -938,8 +935,7 @@ export default function ActiveWorkoutScreen() {
 
           {/* 추천 메시지 */}
           {todayRec && exercise.sets.length === 0 && (
-            <RNView style={[styles.todayRecMessage, { backgroundColor: todayRec.color + '15' }]}>
-              <Text style={styles.todayRecMessageIcon}>{todayRec.icon}</Text>
+            <RNView style={[styles.todayRecMessage, { backgroundColor: todayRec.color + '10', borderLeftWidth: 3, borderLeftColor: todayRec.color }]}>
               <RNView style={styles.todayRecMessageContent}>
                 <Text style={[styles.todayRecMessageText, { color: todayRec.color }]}>{todayRec.message}</Text>
                 {todayRec.subMessage && (
@@ -958,8 +954,8 @@ export default function ActiveWorkoutScreen() {
                 {activeProfileIds.length > 1 && (
                   <Text style={[styles.setHeaderText, dynamicStyles.textTertiary, { width: 36 }]}></Text>
                 )}
-                <Text style={[styles.setHeaderText, dynamicStyles.textTertiary, { flex: 1 }]}>kg</Text>
-                <Text style={[styles.setHeaderText, dynamicStyles.textTertiary, { flex: 1 }]}>횟수</Text>
+                <Text style={[styles.setHeaderText, dynamicStyles.textTertiary, { width: 80 }]}>무게</Text>
+                <Text style={[styles.setHeaderText, dynamicStyles.textTertiary, { width: 70 }]}>횟수</Text>
                 <Text style={[styles.setHeaderText, dynamicStyles.textTertiary, { width: 36 }]}>RPE</Text>
                 <RNView style={{ width: 28 }} />
               </RNView>
@@ -993,8 +989,8 @@ export default function ActiveWorkoutScreen() {
                           </Text>
                         </RNView>
                       )}
-                      <Text style={[styles.completedSetValue, dynamicStyles.textSecondary]}>{set.weight}</Text>
-                      <Text style={[styles.completedSetValue, dynamicStyles.textSecondary]}>{set.reps}</Text>
+                      <Text style={[styles.completedSetValue, dynamicStyles.text, { width: 80 }]}>{set.weight}<Text style={dynamicStyles.textTertiary}>kg</Text></Text>
+                      <Text style={[styles.completedSetValue, dynamicStyles.text, { width: 70 }]}>{set.reps}<Text style={dynamicStyles.textTertiary}>회</Text></Text>
                       {/* RPE 배지 */}
                       <RNView style={[styles.setRpeBadge, setRpeColor && { backgroundColor: setRpeColor + '20' }]}>
                         {set.rpe && setRpeColor ? (
@@ -1030,181 +1026,97 @@ export default function ActiveWorkoutScreen() {
           )}
 
 
-          {/* 입력 영역 - 파란색 강조로 활성 상태 표시 */}
-          <RNView
-            style={[
-              styles.activeInputSection,
-              {
-                backgroundColor: colors.primary + '12',
-                borderColor: colors.primary,
-              }
-            ]}
-          >
-            {/* "다음 세트" 라벨 */}
-            <RNView style={[styles.nextSetBadge, { backgroundColor: colors.primary }]}>
-              <Text style={styles.nextSetBadgeText}>세트 {exercise.sets.length + 1}</Text>
-            </RNView>
+          {/* 입력 영역 - 2줄 컴팩트 디자인 */}
+          <RNView style={[styles.compactInputSection, dynamicStyles.cardSecondary]}>
+            {/* 줄 1: 무게 × 횟수 입력 */}
             <RNView style={styles.compactInputRow}>
-              {/* 무게 입력 */}
+              {/* 세트 번호 */}
+              <Text style={[styles.compactSetNum, dynamicStyles.textSecondary]}>{exercise.sets.length + 1}</Text>
+
+              {/* 무게 그룹 */}
               <RNView style={styles.compactInputGroup}>
-                <Text style={[styles.inputLabel, dynamicStyles.textTertiary]}>무게 (kg)</Text>
-                <RNView style={[styles.compactStepper, dynamicStyles.cardSecondary]}>
-                  <Pressable
-                    style={styles.stepperBtn}
-                    onPress={() => {
-                      const currentVal = parseFloat(getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).weight) || 0;
-                      updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'weight', Math.max(0, currentVal - WEIGHT_INCREMENTS.small).toString());
-                    }}
-                  >
-                    <Text style={[styles.stepperBtnText, dynamicStyles.textSecondary]}>−</Text>
-                  </Pressable>
+                <Pressable
+                  style={[styles.compactStepBtn, { backgroundColor: colors.border }]}
+                  onPress={() => {
+                    const currentVal = parseFloat(getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).weight) || 0;
+                    updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'weight', Math.max(0, currentVal - 2.5).toString());
+                  }}
+                >
+                  <Text style={[styles.compactStepBtnText, dynamicStyles.textSecondary]}>−</Text>
+                </Pressable>
+                <RNView style={[styles.compactValueBox, { backgroundColor: colors.card }]}>
                   <TextInput
-                    style={{
-                      flex: 1,
-                      height: 48,
-                      fontSize: 20,
-                      fontWeight: '700',
-                      textAlign: 'center',
-                      color: colors.text,
-                      backgroundColor: 'transparent',
-                    }}
+                    style={[styles.compactValueInput, { color: colors.text }]}
                     placeholder="0"
                     keyboardType="numeric"
                     value={getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).weight || ''}
                     onChangeText={(v) => updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'weight', v)}
-                    placeholderTextColor={colors.text}
-                    underlineColorAndroid="transparent"
+                    placeholderTextColor={colors.textTertiary}
                   />
-                  <Pressable
-                    style={styles.stepperBtn}
-                    onPress={() => {
-                      const currentVal = parseFloat(getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).weight) || 0;
-                      updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'weight', (currentVal + WEIGHT_INCREMENTS.small).toString());
-                    }}
-                  >
-                    <Text style={[styles.stepperBtnText, dynamicStyles.primary]}>+</Text>
-                  </Pressable>
+                  <Text style={[styles.compactUnit, dynamicStyles.textTertiary]}>kg</Text>
                 </RNView>
+                <Pressable
+                  style={[styles.compactStepBtn, { backgroundColor: colors.primary + '20' }]}
+                  onPress={() => {
+                    const currentVal = parseFloat(getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).weight) || 0;
+                    updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'weight', (currentVal + 2.5).toString());
+                  }}
+                >
+                  <Text style={[styles.compactStepBtnText, { color: colors.primary }]}>+</Text>
+                </Pressable>
               </RNView>
 
-              {/* 횟수 입력 */}
-              <RNView style={styles.compactInputGroup}>
-                <Text style={[styles.inputLabel, dynamicStyles.textTertiary]}>횟수</Text>
-                <RNView style={[
-                  styles.compactStepper,
-                  dynamicStyles.cardSecondary,
-                  inputErrors[exercise.id]?.reps && [styles.inputIncomplete, dynamicStyles.warningBorder],
-                ]}>
-                  <Pressable
-                    style={styles.stepperBtn}
-                    onPress={() => {
-                      const currentVal = parseInt(getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).reps, 10) || 0;
-                      updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'reps', Math.max(1, currentVal - 1).toString());
-                      if (inputErrors[exercise.id]?.reps) {
-                        setInputErrors((prev) => {
-                          const newErrors = { ...prev };
-                          delete newErrors[exercise.id];
-                          return newErrors;
-                        });
-                      }
-                    }}
-                  >
-                    <Text style={[styles.stepperBtnText, dynamicStyles.textSecondary]}>−</Text>
-                  </Pressable>
+              {/* 구분자 */}
+              <Text style={[styles.compactSeparator, dynamicStyles.textTertiary]}>×</Text>
+
+              {/* 횟수 그룹 */}
+              <RNView style={[styles.compactInputGroup, inputErrors[exercise.id]?.reps && { borderWidth: 1, borderColor: colors.warning, borderRadius: 8 }]}>
+                <Pressable
+                  style={[styles.compactStepBtn, { backgroundColor: colors.border }]}
+                  onPress={() => {
+                    const currentVal = parseInt(getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).reps, 10) || 0;
+                    updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'reps', Math.max(1, currentVal - 1).toString());
+                  }}
+                >
+                  <Text style={[styles.compactStepBtnText, dynamicStyles.textSecondary]}>−</Text>
+                </Pressable>
+                <RNView style={[styles.compactValueBox, { backgroundColor: colors.card }]}>
                   <TextInput
-                    style={{
-                      flex: 1,
-                      height: 48,
-                      fontSize: 20,
-                      fontWeight: '700',
-                      textAlign: 'center',
-                      color: colors.text,
-                      backgroundColor: 'transparent',
-                    }}
+                    style={[styles.compactValueInput, { color: colors.text }]}
                     placeholder="0"
                     keyboardType="numeric"
                     value={getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).reps || ''}
                     onChangeText={(v) => {
                       updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'reps', v);
                       if (inputErrors[exercise.id]?.reps) {
-                        setInputErrors((prev) => {
-                          const newErrors = { ...prev };
-                          delete newErrors[exercise.id];
-                          return newErrors;
-                        });
+                        setInputErrors((prev) => { const n = { ...prev }; delete n[exercise.id]; return n; });
                       }
                     }}
-                    placeholderTextColor={colors.text}
-                    underlineColorAndroid="transparent"
-                    autoCorrect={false}
+                    placeholderTextColor={colors.textTertiary}
                   />
-                  <Pressable
-                    style={styles.stepperBtn}
-                    onPress={() => {
-                      const currentVal = parseInt(getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).reps, 10) || 0;
-                      updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'reps', (currentVal + 1).toString());
-                      if (inputErrors[exercise.id]?.reps) {
-                        setInputErrors((prev) => {
-                          const newErrors = { ...prev };
-                          delete newErrors[exercise.id];
-                          return newErrors;
-                        });
-                      }
-                    }}
-                  >
-                    <Text style={[styles.stepperBtnText, dynamicStyles.primary]}>+</Text>
-                  </Pressable>
+                  <Text style={[styles.compactUnit, dynamicStyles.textTertiary]}>회</Text>
                 </RNView>
-                {/* 인라인 힌트 메시지 */}
-                {inputErrors[exercise.id]?.reps && (
-                  <Text style={[styles.inputHint, dynamicStyles.warning]}>1회 이상 입력하세요</Text>
-                )}
-              </RNView>
-
-              {/* 메모 토글 + 세트 추가 버튼 */}
-              <RNView style={styles.setActionButtons}>
-                {/* 메모 토글 버튼 */}
                 <Pressable
-                  style={[
-                    styles.noteToggleBtn,
-                    dynamicStyles.cardSecondary,
-                    noteExpanded[exercise.id] && { backgroundColor: colors.primary + '20' },
-                  ]}
-                  onPress={() => setNoteExpanded((prev) => ({ ...prev, [exercise.id]: !prev[exercise.id] }))}
+                  style={[styles.compactStepBtn, { backgroundColor: colors.primary + '20' }]}
+                  onPress={() => {
+                    const currentVal = parseInt(getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).reps, 10) || 0;
+                    updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'reps', (currentVal + 1).toString());
+                  }}
                 >
-                  <Text style={[
-                    styles.noteToggleBtnText,
-                    noteExpanded[exercise.id] ? { color: colors.primary } : dynamicStyles.textTertiary,
-                  ]}>
-                    ✎
-                  </Text>
-                </Pressable>
-
-                {/* 세트 추가 버튼 */}
-                <Pressable
-                  style={[styles.compactAddBtn, dynamicStyles.primaryBg]}
-                  onPress={() => handleAddSet(exercise.id, exercise.exercise_id, exercise.exercise.category)}
-                >
-                  <Text style={styles.compactAddBtnText}>+</Text>
-                  {activeProfileIds.length > 1 && currentProfile && (
-                    <Text style={styles.compactAddBtnProfile}>{currentProfile.name.charAt(0)}</Text>
-                  )}
+                  <Text style={[styles.compactStepBtnText, { color: colors.primary }]}>+</Text>
                 </Pressable>
               </RNView>
             </RNView>
 
-            {/* 메모 입력 필드 (확장 시) */}
-            {noteExpanded[exercise.id] && (
-              <RNView style={styles.noteInputContainer}>
-                <TextInput
-                  style={[styles.noteInput, dynamicStyles.cardSecondary, { color: colors.text }]}
-                  placeholder="세트 메모 (예: 그립 변경, 컨디션 등)"
-                  placeholderTextColor={colors.textTertiary}
-                  value={getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).note}
-                  onChangeText={(v) => updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'note', v)}
-                  maxLength={100}
-                />
-              </RNView>
+            {/* 줄 2: 세트 추가 버튼 */}
+            <Pressable
+              style={[styles.compactAddBtn, dynamicStyles.primaryBg]}
+              onPress={() => handleAddSet(exercise.id, exercise.exercise_id, exercise.exercise.category)}
+            >
+              <Text style={styles.compactAddBtnText}>세트 추가</Text>
+            </Pressable>
+            {inputErrors[exercise.id]?.reps && (
+              <Text style={[styles.compactErrorText, dynamicStyles.warning]}>1회 이상</Text>
             )}
           </RNView>
         </RNView>
@@ -1246,8 +1158,13 @@ export default function ActiveWorkoutScreen() {
         </RNView>
       )}
 
-      <GestureHandlerRootView style={styles.gestureRoot}>
-        <DraggableFlatList
+      <KeyboardAvoidingView
+        style={styles.gestureRoot}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+      >
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <DraggableFlatList
           data={exercises}
           keyExtractor={(item) => item.id}
           renderItem={renderExerciseCard}
@@ -1361,8 +1278,9 @@ export default function ActiveWorkoutScreen() {
               </Pressable>
             ) : null
           }
-        />
-      </GestureHandlerRootView>
+          />
+        </GestureHandlerRootView>
+      </KeyboardAvoidingView>
 
       {/* RPE 선택 (하단 Sheet) */}
       {showRpePicker && (
@@ -1521,10 +1439,9 @@ export default function ActiveWorkoutScreen() {
                   <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
                     {/* PR 카드 */}
                     {pr && pr.max_weight > 0 && (
-                      <RNView style={[styles.prCard, { backgroundColor: colors.primary + '15' }]}>
-                        <Text style={styles.prCardIcon}>🏆</Text>
+                      <RNView style={[styles.prCard, { backgroundColor: colors.primary + '10', borderLeftWidth: 3, borderLeftColor: colors.primary }]}>
                         <RNView style={styles.prCardContent}>
-                          <Text style={[styles.prCardLabel, { color: colors.primary }]}>개인 기록 (PR)</Text>
+                          <Text style={[styles.prCardLabel, { color: colors.primary }]}>PR</Text>
                           <Text style={[styles.prCardValue, { color: colors.primary }]}>
                             {pr.max_weight}kg × {pr.max_reps_at_weight}회
                           </Text>
@@ -1605,7 +1522,7 @@ export default function ActiveWorkoutScreen() {
                               <RNView style={styles.historyItemLeft}>
                                 <Text style={[styles.historyItemDate, dynamicStyles.text]}>
                                   {dateStr}
-                                  {isPR && <Text style={{ color: colors.primary }}> 🏆</Text>}
+                                  {isPR && <Text style={{ color: colors.primary }}> PR</Text>}
                                 </Text>
                                 <Text style={[styles.historyItemSets, dynamicStyles.textTertiary]}>
                                   {record.total_sets}세트 · {record.total_reps}회 · {record.total_volume.toLocaleString()}kg
@@ -1625,7 +1542,6 @@ export default function ActiveWorkoutScreen() {
                     {/* 최고 볼륨 기록 */}
                     {bestVolumeRecord && bestVolumeRecord.total_volume > 0 && (
                       <RNView style={[styles.bestVolumeCard, dynamicStyles.cardSecondary]}>
-                        <Text style={styles.bestVolumeIcon}>📊</Text>
                         <RNView style={styles.bestVolumeContent}>
                           <Text style={[styles.bestVolumeLabel, dynamicStyles.textTertiary]}>최고 볼륨</Text>
                           <Text style={[styles.bestVolumeValue, dynamicStyles.text]}>
@@ -1660,7 +1576,6 @@ export default function ActiveWorkoutScreen() {
             style={[styles.finishModalContent, dynamicStyles.card]}
             onPress={(e) => e.stopPropagation()}
           >
-            <Text style={styles.finishModalIcon}>🏋️</Text>
             <Text style={[styles.finishModalTitle, dynamicStyles.text]}>운동 완료</Text>
             <Text style={[styles.finishModalSubtitle, dynamicStyles.textSecondary]}>
               {exercises.length}개 운동 · {exercises.reduce((sum, e) => sum + e.sets.length, 0)}세트
@@ -1678,7 +1593,7 @@ export default function ActiveWorkoutScreen() {
                 selectTextOnFocus
               />
               <Text style={[styles.finishNameHint, dynamicStyles.textTertiary]}>
-                💡 수정하지 않아도 자동으로 저장됩니다
+                수정하지 않아도 자동으로 저장됩니다
               </Text>
             </RNView>
 
@@ -1747,8 +1662,8 @@ const styles = StyleSheet.create({
   },
   timerValue: {
     color: '#fff',
-    fontSize: 36,
-    fontWeight: '700',
+    fontSize: 32,
+    fontWeight: '600',
     fontVariant: ['tabular-nums'],
   },
   timerExtendBtn: {
@@ -1789,8 +1704,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sessionName: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '600',
   },
   elapsedTimeBadge: {
     paddingHorizontal: 12,
@@ -1839,15 +1754,15 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 24,
     paddingHorizontal: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     alignItems: 'center',
     zIndex: 11,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 10,
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
   restSheetHandle: {
     width: 36,
@@ -1899,14 +1814,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   exerciseCard: {
-    borderRadius: 12,
+    borderRadius: 10,
     padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    marginBottom: 12,
   },
   exerciseHeader: {
     flexDirection: 'row',
@@ -1915,17 +1825,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   exerciseName: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '500',
   },
   inline1RMBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
   },
   inline1RMText: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '500',
   },
   inlineStatsRow: {
     flexDirection: 'row',
@@ -2169,6 +2079,110 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 4,
     textAlign: 'center',
+  },
+  // 새로운 입력 UI 스타일
+  newInputContainer: {
+    gap: 12,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  inputRowLabel: {
+    width: 36,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  inputControls: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  stepperBtnLarge: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperBtnLargeText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  stepperBtnSmall: {
+    width: 36,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperBtnSmallText: {
+    fontSize: 22,
+    fontWeight: '600',
+  },
+  valueDisplayBox: {
+    flex: 1,
+    height: 44,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    minWidth: 80,
+  },
+  valueInput: {
+    minWidth: 60,
+    fontSize: 24,
+    fontWeight: '700',
+    textAlign: 'right',
+    padding: 0,
+  },
+  valueUnit: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 2,
+  },
+  inputErrorText: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: -4,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  noteBtn: {
+    flex: 1,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noteBtnText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  addSetBtn: {
+    flex: 2,
+    height: 44,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  addSetBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  addSetBtnProfile: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 12,
+    fontWeight: '600',
   },
   compactAddBtn: {
     width: 52,
@@ -2722,9 +2736,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   completedSetValue: {
-    flex: 1,
     fontSize: 15,
-    fontWeight: '500',
+    fontWeight: '600',
     textAlign: 'center',
   },
   completedSetRowWithNote: {
@@ -2849,5 +2862,88 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     fontWeight: '700',
+  },
+
+  // ===== 컴팩트 입력 스타일 =====
+  compactInputSection: {
+    borderRadius: 10,
+    marginTop: 12,
+    padding: 8,
+    gap: 8,
+    overflow: 'hidden',
+  },
+  compactInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  compactSetNum: {
+    width: 18,
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  compactInputGroup: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  compactStepBtn: {
+    width: 28,
+    height: 34,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  compactStepBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  compactValueBox: {
+    flex: 1,
+    minWidth: 0,
+    height: 34,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    overflow: 'hidden',
+  },
+  compactValueInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 15,
+    fontWeight: '700',
+    textAlign: 'right',
+    padding: 0,
+  },
+  compactUnit: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginLeft: 2,
+  },
+  compactSeparator: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  compactAddBtn: {
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compactAddBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  compactErrorText: {
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 4,
   },
 });

@@ -96,21 +96,16 @@ test.describe('Workout Flow', () => {
 
     await page.screenshot({ path: 'e2e/screenshots/05-input-filled.png' });
 
-    // 9. 파란색 세트 추가 버튼 클릭
-    // 모든 + 텍스트를 가진 요소 찾기
-    const plusElements = await page.locator('div:has-text("+")').all();
-    console.log(`Found ${plusElements.length} elements with +`);
-
-    // 직접 CSS로 파란색 버튼 찾기 (RGB 59, 130, 246 = #3b82f6)
-    const blueButton = page.locator('[style*="background"] >> text="+"').last();
-    if (await blueButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+    // 9. 세트 추가 버튼 클릭
+    const addSetButton = page.getByText('세트 추가');
+    if (await addSetButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await addSetButton.click();
+      console.log('Step 9: Clicked 세트 추가 button');
+    } else {
+      // 대안: 파란색 + 버튼
+      const blueButton = page.locator('[style*="background"] >> text="+"').last();
       await blueButton.click();
       console.log('Step 9: Clicked blue + button');
-    } else {
-      // 대안: 마지막 + 요소 클릭 (보통 세트 추가 버튼)
-      const lastPlus = page.getByText('+', { exact: true }).last();
-      await lastPlus.click();
-      console.log('Step 9: Clicked last + button');
     }
 
     await page.waitForTimeout(500); // 상태 업데이트 대기
@@ -307,12 +302,12 @@ test.describe('Workout Flow', () => {
     console.log('Entered reps 10 with 0kg weight (empty = 0kg)');
 
     // 8. 세트 추가 버튼 클릭
-    const blueButton = page.locator('[style*="background"] >> text="+"').last();
-    if (await blueButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await blueButton.click();
+    const addSetButton2 = page.getByText('세트 추가');
+    if (await addSetButton2.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await addSetButton2.click();
     } else {
-      const lastPlus = page.getByText('+', { exact: true }).last();
-      await lastPlus.click();
+      const blueButton = page.locator('[style*="background"] >> text="+"').last();
+      await blueButton.click();
     }
     console.log('Clicked add set button');
 

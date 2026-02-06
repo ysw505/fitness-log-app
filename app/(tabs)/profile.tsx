@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
-import { StyleSheet, TouchableOpacity, Alert, Platform, View as RNView, Modal, Switch, ScrollView, TextInput } from 'react-native';
+import { StyleSheet, TouchableOpacity, Alert, Platform, View as RNView, Modal, Switch, ScrollView, TextInput, Image, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 
 import { Text, View, useThemeColors } from '@/components/Themed';
 import { useAuthStore } from '@/stores/authStore';
@@ -8,6 +9,7 @@ import { useHistoryStore, CompletedWorkout } from '@/stores/historyStore';
 import { useProfileStore, REP_RANGES, RepRangeType } from '@/stores/profileStore';
 import { useBodyCompositionStore, calculateBMI, getBMICategory } from '@/stores/bodyCompositionStore';
 import { FitnessProfile } from '@/types/database.types';
+import { submitFeedback } from '@/services/feedbackService';
 
 // CSV 생성 함수
 const generateWorkoutCSV = (workouts: CompletedWorkout[]): string => {
@@ -94,6 +96,13 @@ export default function ProfileScreen() {
   const [bodyCompBodyFat, setBodyCompBodyFat] = useState('');
   const [bodyCompMuscleMass, setBodyCompMuscleMass] = useState('');
   const [bodyCompHeight, setBodyCompHeight] = useState('');
+
+  // 건의하기
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackTitle, setFeedbackTitle] = useState('');
+  const [feedbackBody, setFeedbackBody] = useState('');
+  const [feedbackImages, setFeedbackImages] = useState<string[]>([]);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
 
   const latestBodyComp = getLatestBodyComp();
   const previousBodyComp = getPreviousBodyComp();
@@ -254,6 +263,56 @@ export default function ProfileScreen() {
       alert(message);
     } else {
       Alert.alert('앱 정보', message);
+    }
+  };
+
+  const handlePickImage = async () => {
+    if (feedbackImages.length >= 3) {
+      const msg = '이미지는 최대 3장까지 첨부할 수 있습니다';
+      Platform.OS === 'web' ? alert(msg) : Alert.alert('알림', msg);
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.7,
+      allowsMultipleSelection: false,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setFeedbackImages(prev => [...prev, result.assets[0].uri]);
+    }
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackTitle.trim()) {
+      const msg = '제목을 입력해주세요';
+      Platform.OS === 'web' ? alert(msg) : Alert.alert('알림', msg);
+      return;
+    }
+    if (!feedbackBody.trim()) {
+      const msg = '내용을 입력해주세요';
+      Platform.OS === 'web' ? alert(msg) : Alert.alert('알림', msg);
+      return;
+    }
+
+    setFeedbackSubmitting(true);
+    try {
+      const result = await submitFeedback(feedbackTitle.trim(), feedbackBody.trim(), feedbackImages);
+      if (result.success) {
+        const msg = '건의사항이 성공적으로 전송되었습니다!';
+        Platform.OS === 'web' ? alert(msg) : Alert.alert('완료', msg);
+        setShowFeedbackModal(false);
+        setFeedbackTitle('');
+        setFeedbackBody('');
+        setFeedbackImages([]);
+      } else {
+        const msg = `전송 실패: ${result.error}`;
+        Platform.OS === 'web' ? alert(msg) : Alert.alert('오류', msg);
+      }
+    } catch (error: any) {
+      const msg = `오류가 발생했습니다: ${error.message}`;
+      Platform.OS === 'web' ? alert(msg) : Alert.alert('오류', msg);
+    } finally {
+      setFeedbackSubmitting(false);
     }
   };
 
@@ -541,9 +600,20 @@ export default function ProfileScreen() {
           <Text style={[styles.menuArrow, dynamicStyles.textTertiary]}>›</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuItem} onPress={handleAppInfo}>
+        <TouchableOpacity
+          style={[styles.menuItem, dynamicStyles.border]}
+          onPress={handleAppInfo}
+        >
           <Text style={[styles.menuText, dynamicStyles.text]}>앱 정보</Text>
           <Text style={[styles.menuValue, dynamicStyles.textSecondary]}>v1.0.0 ›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.menuItem}
+          onPress={() => setShowFeedbackModal(true)}
+        >
+          <Text style={[styles.menuText, { color: colors.primary }]}>건의하기</Text>
+          <Text style={[styles.menuArrow, dynamicStyles.textTertiary]}>›</Text>
         </TouchableOpacity>
       </RNView>
 
@@ -967,6 +1037,98 @@ export default function ProfileScreen() {
           </RNView>
         </TouchableOpacity>
       </Modal>
+
+      {/* 건의하기 모달 */}
+      <Modal
+        visible={showFeedbackModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFeedbackModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowFeedbackModal(false)}
+        >
+          <RNView
+            style={[styles.feedbackModalContent, dynamicStyles.modalBg]}
+            onStartShouldSetResponder={() => true}
+            onTouchEnd={(e) => e.stopPropagation()}
+          >
+            <Text style={[styles.modalTitle, dynamicStyles.text]}>건의하기</Text>
+
+            {/* 제목 */}
+            <TextInput
+              style={[styles.feedbackInput, dynamicStyles.card, { color: colors.text, borderColor: colors.border }]}
+              placeholder="제목"
+              placeholderTextColor={colors.textTertiary}
+              value={feedbackTitle}
+              onChangeText={setFeedbackTitle}
+              maxLength={100}
+            />
+
+            {/* 내용 */}
+            <TextInput
+              style={[styles.feedbackTextArea, dynamicStyles.card, { color: colors.text, borderColor: colors.border }]}
+              placeholder="내용을 입력하세요"
+              placeholderTextColor={colors.textTertiary}
+              value={feedbackBody}
+              onChangeText={setFeedbackBody}
+              multiline
+              numberOfLines={5}
+              textAlignVertical="top"
+              maxLength={2000}
+            />
+
+            {/* 이미지 첨부 영역 */}
+            <RNView style={styles.feedbackImageSection}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.feedbackImageScroll}>
+                {feedbackImages.map((uri, idx) => (
+                  <RNView key={idx} style={styles.feedbackImageWrapper}>
+                    <Image source={{ uri }} style={styles.feedbackImageThumb} />
+                    <TouchableOpacity
+                      style={styles.feedbackImageRemove}
+                      onPress={() => setFeedbackImages(prev => prev.filter((_, i) => i !== idx))}
+                    >
+                      <Text style={styles.feedbackImageRemoveText}>×</Text>
+                    </TouchableOpacity>
+                  </RNView>
+                ))}
+                {feedbackImages.length < 3 && (
+                  <TouchableOpacity
+                    style={[styles.feedbackImageAdd, { borderColor: colors.border }]}
+                    onPress={handlePickImage}
+                  >
+                    <Text style={[styles.feedbackImageAddText, dynamicStyles.textTertiary]}>+</Text>
+                    <Text style={[styles.feedbackImageAddLabel, dynamicStyles.textTertiary]}>사진</Text>
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
+            </RNView>
+
+            {/* 버튼 */}
+            <RNView style={styles.feedbackButtons}>
+              <TouchableOpacity
+                style={[styles.feedbackCancelBtn, { borderColor: colors.border }]}
+                onPress={() => setShowFeedbackModal(false)}
+              >
+                <Text style={[styles.feedbackCancelBtnText, dynamicStyles.textSecondary]}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.feedbackSubmitBtn, dynamicStyles.primaryBg, feedbackSubmitting && { opacity: 0.6 }]}
+                onPress={handleSubmitFeedback}
+                disabled={feedbackSubmitting}
+              >
+                {feedbackSubmitting ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.feedbackSubmitBtnText}>보내기</Text>
+                )}
+              </TouchableOpacity>
+            </RNView>
+          </RNView>
+        </TouchableOpacity>
+      </Modal>
     </ScrollView>
   );
 }
@@ -1378,5 +1540,104 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#fff',
+  },
+
+  // 건의하기 모달
+  feedbackModalContent: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: 16,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  feedbackInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 15,
+    marginBottom: 10,
+  },
+  feedbackTextArea: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 15,
+    marginBottom: 10,
+    minHeight: 120,
+  },
+  feedbackImageSection: {
+    marginBottom: 16,
+  },
+  feedbackImageScroll: {
+    flexDirection: 'row',
+  },
+  feedbackImageWrapper: {
+    position: 'relative',
+    marginRight: 8,
+  },
+  feedbackImageThumb: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+  },
+  feedbackImageRemove: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedbackImageRemoveText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  feedbackImageAdd: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedbackImageAddText: {
+    fontSize: 24,
+    fontWeight: '300',
+  },
+  feedbackImageAddLabel: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  feedbackButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  feedbackCancelBtn: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  feedbackCancelBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  feedbackSubmitBtn: {
+    flex: 2,
+    padding: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  feedbackSubmitBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

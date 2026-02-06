@@ -18,6 +18,14 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: 'mobile-android',
+      use: { ...devices['Pixel 5'] },
+    },
+    {
+      name: 'mobile-android-small',
+      use: { ...devices['Pixel 2'] },
+    },
   ],
   webServer: {
     command: 'npx expo start --web --port 8081',

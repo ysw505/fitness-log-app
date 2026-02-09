@@ -101,7 +101,7 @@ export default function ProfileScreen() {
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackTitle, setFeedbackTitle] = useState('');
   const [feedbackBody, setFeedbackBody] = useState('');
-  const [feedbackImages, setFeedbackImages] = useState<string[]>([]);
+  const [feedbackImages, setFeedbackImages] = useState<{uri: string; base64: string}[]>([]);
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
 
   const latestBodyComp = getLatestBodyComp();
@@ -274,11 +274,12 @@ export default function ProfileScreen() {
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      quality: 0.7,
+      quality: 0.5,
       allowsMultipleSelection: false,
+      base64: true,
     });
-    if (!result.canceled && result.assets[0]) {
-      setFeedbackImages(prev => [...prev, result.assets[0].uri]);
+    if (!result.canceled && result.assets[0]?.base64) {
+      setFeedbackImages(prev => [...prev, { uri: result.assets[0].uri, base64: result.assets[0].base64! }]);
     }
   };
 
@@ -296,7 +297,7 @@ export default function ProfileScreen() {
 
     setFeedbackSubmitting(true);
     try {
-      const result = await submitFeedback(feedbackTitle.trim(), feedbackBody.trim(), feedbackImages);
+      const result = await submitFeedback(feedbackTitle.trim(), feedbackBody.trim(), feedbackImages.map(img => img.base64));
       if (result.success) {
         const msg = '건의사항이 성공적으로 전송되었습니다!';
         Platform.OS === 'web' ? alert(msg) : Alert.alert('완료', msg);
@@ -1083,9 +1084,9 @@ export default function ProfileScreen() {
             {/* 이미지 첨부 영역 */}
             <RNView style={styles.feedbackImageSection}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.feedbackImageScroll}>
-                {feedbackImages.map((uri, idx) => (
+                {feedbackImages.map((img, idx) => (
                   <RNView key={idx} style={styles.feedbackImageWrapper}>
-                    <Image source={{ uri }} style={styles.feedbackImageThumb} />
+                    <Image source={{ uri: img.uri }} style={styles.feedbackImageThumb} />
                     <TouchableOpacity
                       style={styles.feedbackImageRemove}
                       onPress={() => setFeedbackImages(prev => prev.filter((_, i) => i !== idx))}

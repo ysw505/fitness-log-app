@@ -26,6 +26,14 @@ export default defineConfig({
       name: 'mobile-android-small',
       use: { ...devices['Pixel 2'] },
     },
+    {
+      name: 'mobile-iphone',
+      use: { ...devices['iPhone 14'] },
+    },
+    {
+      name: 'mobile-iphone-small',
+      use: { ...devices['iPhone SE'] },
+    },
   ],
   webServer: {
     command: 'npx expo start --web --port 8081',

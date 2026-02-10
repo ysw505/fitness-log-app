@@ -148,7 +148,7 @@ ${image_context}
 1. 피드백 내용을 분석해서 실제 앱 코드 수정이 필요한지 판단해
 2. 수정이 필요하면 코드를 수정하고 웹 빌드(npx expo export --platform web)로 검증해
 3. 수정이 불필요한 단순 의견이면 분석 결과만 정리해
-4. 절대로 git commit이나 git push를 하지 마
+4. 절대로 git 명령어를 실행하지 마 (git commit, git push, git checkout 등 모든 git 명령 금지)
 5. 마지막에 반드시 다음 형식으로 요약을 출력해:
 
 ===SUMMARY_START===
@@ -174,6 +174,13 @@ ${image_context}
     git branch -D "$branch_name" 2>/dev/null || true
     continue
   }
+
+  # 4.5단계: Claude가 브랜치를 변경했을 수 있으므로 복구
+  current_branch=$(git branch --show-current 2>/dev/null)
+  if [ "$current_branch" != "$branch_name" ]; then
+    log "#${issue_number} - 브랜치 복구: ${current_branch} → ${branch_name}"
+    git checkout "$branch_name" 2>/dev/null || git checkout -b "$branch_name" 2>/dev/null || true
+  fi
 
   # 5단계: 요약 추출
   summary=$(echo "$claude_output" | sed -n '/===SUMMARY_START===/,/===SUMMARY_END===/p' | grep -v '===SUMMARY')

@@ -265,7 +265,15 @@ ${image_context}
   has_changes=$(git status --porcelain 2>/dev/null | grep -v '^?? e2e/' | grep -v '^?? test-results/' || true)
 
   if [ -n "$has_changes" ] && [ "$status_line" = "수정완료" ]; then
-    log "#${issue_number} - 변경사항 커밋 및 PR 생성"
+    # 커밋 전 브랜치 강제 확인
+    current_branch=$(git branch --show-current 2>/dev/null)
+    if [ "$current_branch" != "$branch_name" ]; then
+      log "#${issue_number} - 커밋 전 브랜치 복구: ${current_branch} → ${branch_name}"
+      git stash 2>/dev/null || true
+      git checkout "$branch_name" 2>/dev/null || git checkout -b "$branch_name" 2>/dev/null
+      git stash pop 2>/dev/null || true
+    fi
+    log "#${issue_number} - 변경사항 커밋 및 PR 생성 (브랜치: $(git branch --show-current))"
 
     git add -A
     git reset -- e2e/screenshots/ test-results/ playwright-report/ 2>/dev/null || true

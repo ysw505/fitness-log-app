@@ -318,6 +318,9 @@ export default function ActiveWorkoutScreen() {
   // 세트 메모 입력 확장 상태
   const [noteExpanded, setNoteExpanded] = useState<Record<string, boolean>>({});
 
+  // 운동 카드 접힌 상태 (운동 ID -> boolean)
+  const [collapsedExercises, setCollapsedExercises] = useState<Record<string, boolean>>({});
+
   // 동적 스타일
   const dynamicStyles = useMemo(() => ({
     container: { backgroundColor: colors.background },
@@ -809,7 +812,7 @@ export default function ActiveWorkoutScreen() {
     return (
       <ScaleDecorator>
         <RNView style={[styles.exerciseCard, dynamicStyles.card, isActive && styles.exerciseCardDragging]}>
-          {/* 운동 헤더 (드래그 핸들 + 이름 + 1RM) */}
+          {/* 운동 헤더 (드래그 핸들 + 이름 + 접기/펼치기 + 1RM) */}
           <RNView style={styles.exerciseHeader}>
             <Pressable
               onLongPress={drag}
@@ -821,6 +824,20 @@ export default function ActiveWorkoutScreen() {
             <Text style={[styles.exerciseName, dynamicStyles.text, { flex: 1 }]}>
               {exercise.exercise.name_ko || exercise.exercise.name}
             </Text>
+            {/* 접기/펼치기 버튼 */}
+            <Pressable
+              onPress={() => {
+                setCollapsedExercises(prev => ({
+                  ...prev,
+                  [exercise.id]: !prev[exercise.id]
+                }));
+              }}
+              style={styles.collapseButton}
+            >
+              <Text style={[styles.collapseButtonText, dynamicStyles.textTertiary]}>
+                {collapsedExercises[exercise.id] ? '▼' : '▲'}
+              </Text>
+            </Pressable>
             {/* 1RM 인라인 표시 */}
             {exercise.sets.length > 0 && (() => {
               const bestSet = exercise.sets.reduce((best, set) => {
@@ -840,6 +857,9 @@ export default function ActiveWorkoutScreen() {
             })()}
           </RNView>
 
+          {/* 접힌 상태가 아닐 때만 세부 내용 표시 */}
+          {!collapsedExercises[exercise.id] && (
+            <>
           {/* 인라인 통계 배지들 */}
           {records && records.length > 0 && (
             <RNView style={styles.inlineStatsRow}>
@@ -1119,6 +1139,8 @@ export default function ActiveWorkoutScreen() {
               <Text style={[styles.compactErrorText, dynamicStyles.warning]}>1회 이상</Text>
             )}
           </RNView>
+            </>
+          )}
         </RNView>
       </ScaleDecorator>
     );
@@ -1874,6 +1896,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: 2,
+  },
+  collapseButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  collapseButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
   reorderButtons: {
     flexDirection: 'column',

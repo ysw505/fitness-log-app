@@ -39,3 +39,16 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# build artifacts
+*.apk
+*.aab
+*.ipa
+
+# test artifacts
+test-results/
+playwright-report/
+
+# misc
+download/
+scripts/auto-reply.log

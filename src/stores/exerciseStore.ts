@@ -103,6 +103,7 @@ export const useExerciseStore = create<ExerciseState>()(
                 category: newExercise.category,
                 muscle_group: newExercise.muscle_group,
                 equipment: newExercise.equipment,
+                weight_unit: newExercise.weight_unit || 'kg',
                 is_custom: true,
                 user_id: user.id,
               })

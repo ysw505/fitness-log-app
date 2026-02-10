@@ -21,6 +21,7 @@ export default function AddExerciseScreen() {
   const [nameKo, setNameKo] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedEquipment, setSelectedEquipment] = useState<string>('');
+  const [weightUnit, setWeightUnit] = useState<'kg' | 'lb'>('kg');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 동적 스타일
@@ -56,6 +57,7 @@ export default function AddExerciseScreen() {
         category: selectedCategory,
         muscle_group: [],
         equipment: selectedEquipment || null,
+        weight_unit: weightUnit,
         user_id: null,
         profile_id: null,
       });
@@ -152,6 +154,45 @@ export default function AddExerciseScreen() {
                 </Text>
               </Pressable>
             ))}
+          </RNView>
+        </RNView>
+
+        {/* 무게 단위 선택 */}
+        <RNView style={styles.inputGroup}>
+          <Text style={[styles.label, dynamicStyles.text]}>무게 단위</Text>
+          <RNView style={styles.optionGrid}>
+            <Pressable
+              style={[
+                styles.optionButton,
+                weightUnit === 'kg' ? dynamicStyles.primaryBg : dynamicStyles.cardSecondary,
+              ]}
+              onPress={() => setWeightUnit('kg')}
+            >
+              <Text
+                style={[
+                  styles.optionButtonText,
+                  weightUnit === 'kg' ? styles.optionButtonTextSelected : dynamicStyles.textSecondary,
+                ]}
+              >
+                kg (킬로그램)
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.optionButton,
+                weightUnit === 'lb' ? dynamicStyles.primaryBg : dynamicStyles.cardSecondary,
+              ]}
+              onPress={() => setWeightUnit('lb')}
+            >
+              <Text
+                style={[
+                  styles.optionButtonText,
+                  weightUnit === 'lb' ? styles.optionButtonTextSelected : dynamicStyles.textSecondary,
+                ]}
+              >
+                lb (파운드)
+              </Text>
+            </Pressable>
           </RNView>
         </RNView>
 

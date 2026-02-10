@@ -345,7 +345,6 @@ export default function ActiveWorkoutScreen() {
   const restTimerEndTime = useRef<number | null>(null); // 타이머 종료 예정 시간 (timestamp)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appState = useRef(AppState.currentState);
-  const flatListRef = useRef<any>(null);
 
   // RPE 입력 상태
   const [showRpePicker, setShowRpePicker] = useState(false);
@@ -1052,18 +1051,6 @@ export default function ActiveWorkoutScreen() {
                     keyboardType="numeric"
                     value={getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).weight || ''}
                     onChangeText={(v) => updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'weight', v)}
-                    onFocus={() => {
-                      const index = exercises.findIndex((e) => e.id === exercise.id);
-                      if (index !== -1 && flatListRef.current) {
-                        setTimeout(() => {
-                          flatListRef.current?.scrollToIndex({
-                            index,
-                            animated: true,
-                            viewPosition: 0.5, // 화면 중앙에 위치
-                          });
-                        }, 100);
-                      }
-                    }}
                     placeholderTextColor={colors.textTertiary}
                   />
                   <Text style={[styles.compactUnit, dynamicStyles.textTertiary]}>kg</Text>
@@ -1103,18 +1090,6 @@ export default function ActiveWorkoutScreen() {
                       updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'reps', v);
                       if (inputErrors[exercise.id]?.reps) {
                         setInputErrors((prev) => { const n = { ...prev }; delete n[exercise.id]; return n; });
-                      }
-                    }}
-                    onFocus={() => {
-                      const index = exercises.findIndex((e) => e.id === exercise.id);
-                      if (index !== -1 && flatListRef.current) {
-                        setTimeout(() => {
-                          flatListRef.current?.scrollToIndex({
-                            index,
-                            animated: true,
-                            viewPosition: 0.5, // 화면 중앙에 위치
-                          });
-                        }, 100);
                       }
                     }}
                     placeholderTextColor={colors.textTertiary}
@@ -1190,7 +1165,6 @@ export default function ActiveWorkoutScreen() {
       >
         <GestureHandlerRootView style={{ flex: 1 }}>
           <DraggableFlatList
-          ref={flatListRef}
           data={exercises}
           keyExtractor={(item) => item.id}
           renderItem={renderExerciseCard}
@@ -1202,13 +1176,6 @@ export default function ActiveWorkoutScreen() {
               // 새 순서의 운동 목록으로 직접 업데이트
               useWorkoutStore.setState({ exercises: data });
             }
-          }}
-          onScrollToIndexFailed={(info) => {
-            // scrollToIndex 실패 시 fallback
-            flatListRef.current?.scrollToOffset({
-              offset: info.averageItemLength * info.index,
-              animated: true,
-            });
           }}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={

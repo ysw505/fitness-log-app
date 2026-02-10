@@ -99,7 +99,6 @@ export interface Database {
           is_custom: boolean;
           user_id: string | null;
           profile_id: string | null;
-          weight_unit: 'kg' | 'lb';
           created_at: string;
         };
         Insert: {
@@ -112,7 +111,6 @@ export interface Database {
           is_custom?: boolean;
           user_id?: string | null;
           profile_id?: string | null;
-          weight_unit?: 'kg' | 'lb';
           created_at?: string;
         };
         Update: {
@@ -125,7 +123,6 @@ export interface Database {
           is_custom?: boolean;
           user_id?: string | null;
           profile_id?: string | null;
-          weight_unit?: 'kg' | 'lb';
           created_at?: string;
         };
         Relationships: [

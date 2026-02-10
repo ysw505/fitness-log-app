@@ -223,10 +223,9 @@ interface PreviousRecordInfoProps {
   prevSets: { weight: number; reps: number }[];
   personalRecord: PersonalRecord | null;
   colors: any;
-  weightUnit: 'kg' | 'lb';
 }
 
-const PreviousRecordInfo = ({ prevSets, personalRecord, colors, weightUnit }: PreviousRecordInfoProps) => {
+const PreviousRecordInfo = ({ prevSets, personalRecord, colors }: PreviousRecordInfoProps) => {
   if (prevSets.length === 0 && !personalRecord) return null;
 
   return (
@@ -240,7 +239,7 @@ const PreviousRecordInfo = ({ prevSets, personalRecord, colors, weightUnit }: Pr
           <RNView style={styles.prevSetsList}>
             {prevSets.slice(0, 5).map((set, idx) => (
               <Text key={idx} style={[styles.prevSetItem, { color: colors.textSecondary }]}>
-                {set.weight}{weightUnit}×{set.reps}
+                {set.weight}kg×{set.reps}
               </Text>
             ))}
             {prevSets.length > 5 && (
@@ -255,7 +254,7 @@ const PreviousRecordInfo = ({ prevSets, personalRecord, colors, weightUnit }: Pr
       {personalRecord && personalRecord.max_weight > 0 && (
         <RNView style={[styles.prBadge, { backgroundColor: colors.primary + '10' }]}>
           <Text style={[styles.prBadgeText, { color: colors.primary }]}>
-            PR {personalRecord.max_weight}{weightUnit} × {personalRecord.max_reps_at_weight}
+            PR {personalRecord.max_weight}kg × {personalRecord.max_reps_at_weight}
           </Text>
         </RNView>
       )}
@@ -361,7 +360,6 @@ export default function ActiveWorkoutScreen() {
     id: string;
     name: string;
     name_ko: string | null;
-    weight_unit: 'kg' | 'lb';
   } | null>(null);
 
   // 운동 완료 모달 상태
@@ -808,9 +806,6 @@ export default function ActiveWorkoutScreen() {
     // 이 운동의 PR (개인 기록)
     const exercisePR = personalRecords[exercise.exercise_id] || null;
 
-    // 무게 단위 (운동 종목별)
-    const weightUnit = exercise.exercise.weight_unit || 'kg';
-
     return (
       <ScaleDecorator>
         <RNView style={[styles.exerciseCard, dynamicStyles.card, isActive && styles.exerciseCardDragging]}>
@@ -837,7 +832,7 @@ export default function ActiveWorkoutScreen() {
               if (estimated1RM > 0) {
                 return (
                   <RNView style={[styles.inline1RMBadge, { backgroundColor: colors.primary + '15' }]}>
-                    <Text style={[styles.inline1RMText, { color: colors.primary }]}>1RM {estimated1RM}{weightUnit}</Text>
+                    <Text style={[styles.inline1RMText, { color: colors.primary }]}>1RM {estimated1RM}kg</Text>
                   </RNView>
                 );
               }
@@ -857,7 +852,7 @@ export default function ActiveWorkoutScreen() {
               {exercisePR && exercisePR.max_weight > 0 && (
                 <RNView style={[styles.inlineStatBadge, dynamicStyles.cardSecondary]}>
                   <Text style={[styles.inlineStatText, dynamicStyles.textSecondary]}>
-                    PR {exercisePR.max_weight}{weightUnit} × {exercisePR.max_reps_at_weight}
+                    PR {exercisePR.max_weight}kg × {exercisePR.max_reps_at_weight}
                   </Text>
                 </RNView>
               )}
@@ -890,7 +885,6 @@ export default function ActiveWorkoutScreen() {
                     id: exercise.exercise_id,
                     name: exercise.exercise.name,
                     name_ko: exercise.exercise.name_ko,
-                    weight_unit: exercise.exercise.weight_unit || 'kg',
                   });
                   setHistoryModalVisible(true);
                 }}
@@ -905,7 +899,6 @@ export default function ActiveWorkoutScreen() {
             prevSets={prevSets}
             personalRecord={exercisePR}
             colors={colors}
-            weightUnit={weightUnit}
           />
 
           {/* 지난번과 동일 버튼 (이전 기록 있고, 현재 세트 없을 때만) */}
@@ -926,14 +919,14 @@ export default function ActiveWorkoutScreen() {
               <RNView style={[styles.prevRecordBox, dynamicStyles.cardSecondary]}>
                 <Text style={[styles.prevRecordLabel, dynamicStyles.textTertiary]}>지난번</Text>
                 <Text style={[styles.prevRecordValue, dynamicStyles.textSecondary]}>
-                  {prevRecord.max_weight}{weightUnit} × {Math.round(prevRecord.total_reps / prevRecord.total_sets) || 0}회
+                  {prevRecord.max_weight}kg × {Math.round(prevRecord.total_reps / prevRecord.total_sets) || 0}회
                 </Text>
               </RNView>
               {todayRec && (
                 <RNView style={[styles.todayRecBox, { backgroundColor: todayRec.color + '15' }]}>
                   <Text style={[styles.todayRecLabel, { color: todayRec.color }]}>오늘 추천</Text>
                   <Text style={[styles.todayRecValue, { color: todayRec.color }]}>
-                    {todayRec.weight}{weightUnit} × {todayRec.reps}회
+                    {todayRec.weight}kg × {todayRec.reps}회
                   </Text>
                 </RNView>
               )}
@@ -996,7 +989,7 @@ export default function ActiveWorkoutScreen() {
                           </Text>
                         </RNView>
                       )}
-                      <Text style={[styles.completedSetValue, dynamicStyles.text, { width: 80 }]}>{set.weight}<Text style={dynamicStyles.textTertiary}>{weightUnit}</Text></Text>
+                      <Text style={[styles.completedSetValue, dynamicStyles.text, { width: 80 }]}>{set.weight}<Text style={dynamicStyles.textTertiary}>kg</Text></Text>
                       <Text style={[styles.completedSetValue, dynamicStyles.text, { width: 70 }]}>{set.reps}<Text style={dynamicStyles.textTertiary}>회</Text></Text>
                       {/* RPE 배지 */}
                       <RNView style={[styles.setRpeBadge, setRpeColor && { backgroundColor: setRpeColor + '20' }]}>
@@ -1060,7 +1053,7 @@ export default function ActiveWorkoutScreen() {
                     onChangeText={(v) => updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'weight', v)}
                     placeholderTextColor={colors.textTertiary}
                   />
-                  <Text style={[styles.compactUnit, dynamicStyles.textTertiary]}>{weightUnit}</Text>
+                  <Text style={[styles.compactUnit, dynamicStyles.textTertiary]}>kg</Text>
                 </RNView>
                 <Pressable
                   style={[styles.compactStepBtn, { backgroundColor: colors.primary + '20' }]}
@@ -1412,7 +1405,6 @@ export default function ActiveWorkoutScreen() {
               const history = getExerciseHistory(selectedExerciseForHistory.id);
               const pr = personalRecords[selectedExerciseForHistory.id];
               const records = history?.records || [];
-              const historyWeightUnit = selectedExerciseForHistory.weight_unit;
 
               // 차트용 데이터 (최근 10개, 역순으로 오래된 것부터)
               const chartData = records.slice(0, 10).reverse();
@@ -1451,10 +1443,10 @@ export default function ActiveWorkoutScreen() {
                         <RNView style={styles.prCardContent}>
                           <Text style={[styles.prCardLabel, { color: colors.primary }]}>PR</Text>
                           <Text style={[styles.prCardValue, { color: colors.primary }]}>
-                            {pr.max_weight}{historyWeightUnit} × {pr.max_reps_at_weight}회
+                            {pr.max_weight}kg × {pr.max_reps_at_weight}회
                           </Text>
                           <Text style={[styles.prCardSub, dynamicStyles.textTertiary]}>
-                            예상 1RM: {pr.estimated_1rm}{historyWeightUnit}
+                            예상 1RM: {pr.estimated_1rm}kg
                           </Text>
                         </RNView>
                       </RNView>
@@ -1467,7 +1459,7 @@ export default function ActiveWorkoutScreen() {
                         <Text style={[styles.statCardLabel, dynamicStyles.textTertiary]}>총 운동</Text>
                       </RNView>
                       <RNView style={[styles.statCard, dynamicStyles.cardSecondary]}>
-                        <Text style={[styles.statCardValue, dynamicStyles.text]}>{avgWeight}{historyWeightUnit}</Text>
+                        <Text style={[styles.statCardValue, dynamicStyles.text]}>{avgWeight}kg</Text>
                         <Text style={[styles.statCardLabel, dynamicStyles.textTertiary]}>평균 무게</Text>
                       </RNView>
                       <RNView style={[styles.statCard, dynamicStyles.cardSecondary]}>
@@ -1533,12 +1525,12 @@ export default function ActiveWorkoutScreen() {
                                   {isPR && <Text style={{ color: colors.primary }}> PR</Text>}
                                 </Text>
                                 <Text style={[styles.historyItemSets, dynamicStyles.textTertiary]}>
-                                  {record.total_sets}세트 · {record.total_reps}회 · {record.total_volume.toLocaleString()}{historyWeightUnit}
+                                  {record.total_sets}세트 · {record.total_reps}회 · {record.total_volume.toLocaleString()}kg
                                 </Text>
                               </RNView>
                               <RNView style={styles.historyItemRight}>
                                 <Text style={[styles.historyItemWeight, dynamicStyles.primary]}>
-                                  {record.max_weight}{historyWeightUnit}
+                                  {record.max_weight}kg
                                 </Text>
                               </RNView>
                             </RNView>
@@ -1553,7 +1545,7 @@ export default function ActiveWorkoutScreen() {
                         <RNView style={styles.bestVolumeContent}>
                           <Text style={[styles.bestVolumeLabel, dynamicStyles.textTertiary]}>최고 볼륨</Text>
                           <Text style={[styles.bestVolumeValue, dynamicStyles.text]}>
-                            {bestVolumeRecord.total_volume.toLocaleString()}{historyWeightUnit}
+                            {bestVolumeRecord.total_volume.toLocaleString()}kg
                           </Text>
                           <Text style={[styles.bestVolumeSub, dynamicStyles.textTertiary]}>
                             {new Date(bestVolumeRecord.date).getMonth() + 1}월 {new Date(bestVolumeRecord.date).getDate()}일

@@ -345,7 +345,6 @@ export default function ActiveWorkoutScreen() {
   const restTimerEndTime = useRef<number | null>(null); // 타이머 종료 예정 시간 (timestamp)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appState = useRef(AppState.currentState);
-  const flatListRef = useRef<any>(null);
 
   // RPE 입력 상태
   const [showRpePicker, setShowRpePicker] = useState(false);
@@ -692,20 +691,6 @@ export default function ActiveWorkoutScreen() {
       '취소하기'
     );
   };
-
-  const handleInputFocus = useCallback((exerciseId: string) => {
-    const index = exercises.findIndex((e) => e.id === exerciseId);
-    if (index !== -1 && flatListRef.current) {
-      // 약간의 지연 후 스크롤 (키보드 애니메이션 대기)
-      setTimeout(() => {
-        flatListRef.current?.scrollToIndex({
-          index,
-          animated: true,
-          viewPosition: 0.5, // 화면 중앙으로
-        });
-      }, 100);
-    }
-  }, [exercises]);
 
   const handleAddSet = async (workoutExerciseId: string, exerciseDbId: string, category: string) => {
     const values = getInputValues(workoutExerciseId, exerciseDbId, category);
@@ -1066,7 +1051,6 @@ export default function ActiveWorkoutScreen() {
                     keyboardType="numeric"
                     value={getInputValues(exercise.id, exercise.exercise_id, exercise.exercise.category).weight || ''}
                     onChangeText={(v) => updateInputValue(exercise.id, exercise.exercise_id, exercise.exercise.category, 'weight', v)}
-                    onFocus={() => handleInputFocus(exercise.id)}
                     placeholderTextColor={colors.textTertiary}
                   />
                   <Text style={[styles.compactUnit, dynamicStyles.textTertiary]}>kg</Text>
@@ -1108,7 +1092,6 @@ export default function ActiveWorkoutScreen() {
                         setInputErrors((prev) => { const n = { ...prev }; delete n[exercise.id]; return n; });
                       }
                     }}
-                    onFocus={() => handleInputFocus(exercise.id)}
                     placeholderTextColor={colors.textTertiary}
                   />
                   <Text style={[styles.compactUnit, dynamicStyles.textTertiary]}>회</Text>
@@ -1139,7 +1122,7 @@ export default function ActiveWorkoutScreen() {
         </RNView>
       </ScaleDecorator>
     );
-  }, [exercises, colors, dynamicStyles, activeProfileIds, currentSetProfileId, currentProfile, targetRepRange, handleAddSet, handleDeleteSet, getExerciseRecords, getTodayRecommendation, getInputValues, updateInputValue, personalRecords, noteExpanded, handleInputFocus]);
+  }, [exercises, colors, dynamicStyles, activeProfileIds, currentSetProfileId, currentProfile, targetRepRange, handleAddSet, handleDeleteSet, getExerciseRecords, getTodayRecommendation, getInputValues, updateInputValue, personalRecords, noteExpanded]);
 
   // 진행 중인 운동이 없으면 빈 화면 표시
   if (!activeSession) {
@@ -1182,7 +1165,6 @@ export default function ActiveWorkoutScreen() {
       >
         <GestureHandlerRootView style={{ flex: 1 }}>
           <DraggableFlatList
-          ref={flatListRef}
           data={exercises}
           keyExtractor={(item) => item.id}
           renderItem={renderExerciseCard}
@@ -1194,13 +1176,6 @@ export default function ActiveWorkoutScreen() {
               // 새 순서의 운동 목록으로 직접 업데이트
               useWorkoutStore.setState({ exercises: data });
             }
-          }}
-          onScrollToIndexFailed={(info) => {
-            // 스크롤 실패 시 대체 방법: offset으로 스크롤
-            flatListRef.current?.scrollToOffset({
-              offset: info.averageItemLength * info.index,
-              animated: true,
-            });
           }}
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={

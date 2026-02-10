@@ -22,6 +22,7 @@ import { TermIcon } from '@/components/TermTooltip';
 import { useWorkoutStore, WorkoutSetWithProfile } from '@/stores/workoutStore';
 import { useHistoryStore, PersonalRecord } from '@/stores/historyStore';
 import { useProfileStore } from '@/stores/profileStore';
+import { getNextSetRecommendations, RpeRecommendation } from '@/src/utils/rpeRecommendation';
 
 // 웹 호환 confirm/alert
 const showConfirm = (
@@ -351,6 +352,11 @@ export default function ActiveWorkoutScreen() {
   const [pendingSetId, setPendingSetId] = useState<string | null>(null);
   const [selectedRpe, setSelectedRpe] = useState<number | null>(null);
 
+  // RPE 기반 추천 상태
+  const [showRpeRecommendation, setShowRpeRecommendation] = useState(false);
+  const [rpeRecommendations, setRpeRecommendations] = useState<RpeRecommendation[]>([]);
+  const [currentExerciseForRec, setCurrentExerciseForRec] = useState<string | null>(null);
+
   // 운동 경과 시간
   const [elapsedTime, setElapsedTime] = useState('00:00');
 
@@ -505,6 +511,29 @@ export default function ActiveWorkoutScreen() {
     if (pendingSetId && rpe !== null) {
       try {
         await useWorkoutStore.getState().updateSet(pendingSetId, { rpe });
+
+        // RPE 저장 후 다음 세트 추천 계산
+        const completedSet = exercises
+          .flatMap((ex) => ex.sets)
+          .find((set) => set.id === pendingSetId);
+
+        if (completedSet && completedSet.weight && completedSet.reps) {
+          const recommendations = getNextSetRecommendations(
+            completedSet.weight,
+            completedSet.reps,
+            rpe
+          );
+
+          if (recommendations.length > 0) {
+            setRpeRecommendations(recommendations);
+            // 완료된 세트가 속한 운동 찾기
+            const exerciseForSet = exercises.find((ex) =>
+              ex.sets.some((s) => s.id === pendingSetId)
+            );
+            setCurrentExerciseForRec(exerciseForSet?.id || null);
+            setShowRpeRecommendation(true);
+          }
+        }
       } catch (error) {
         console.error('Failed to update RPE:', error);
       }
@@ -512,14 +541,56 @@ export default function ActiveWorkoutScreen() {
     setShowRpePicker(false);
     setPendingSetId(null);
     setSelectedRpe(null);
-    // RPE 선택 후 휴식 시간 선택 UI 표시
-    showRestPickerUI();
+
+    // RPE 추천이 표시되지 않으면 바로 휴식 UI 표시
+    // 추천이 있으면 추천 선택 후 휴식 UI 표시
+    if (!showRpeRecommendation) {
+      showRestPickerUI();
+    }
   };
 
   const skipRpe = () => {
     setShowRpePicker(false);
     setPendingSetId(null);
     setSelectedRpe(null);
+    showRestPickerUI();
+  };
+
+  // RPE 추천 적용 핸들러
+  const applyRpeRecommendation = (recommendation: RpeRecommendation) => {
+    if (currentExerciseForRec) {
+      const exercise = exercises.find((ex) => ex.id === currentExerciseForRec);
+      if (exercise) {
+        // 다음 세트 입력값에 추천값 설정
+        updateInputValue(
+          currentExerciseForRec,
+          exercise.exercise_db_id,
+          exercise.category,
+          'weight',
+          recommendation.weight.toString()
+        );
+        updateInputValue(
+          currentExerciseForRec,
+          exercise.exercise_db_id,
+          exercise.category,
+          'reps',
+          recommendation.reps.toString()
+        );
+      }
+    }
+
+    // 추천 모달 닫고 휴식 UI 표시
+    setShowRpeRecommendation(false);
+    setRpeRecommendations([]);
+    setCurrentExerciseForRec(null);
+    showRestPickerUI();
+  };
+
+  // RPE 추천 건너뛰기
+  const skipRpeRecommendation = () => {
+    setShowRpeRecommendation(false);
+    setRpeRecommendations([]);
+    setCurrentExerciseForRec(null);
     showRestPickerUI();
   };
 
@@ -1359,8 +1430,43 @@ export default function ActiveWorkoutScreen() {
         </>
       )}
 
+      {/* RPE 기반 다음 세트 추천 (하단 Sheet) */}
+      {showRpeRecommendation && (
+        <>
+          <Pressable style={styles.restSheetOverlay} onPress={skipRpeRecommendation} />
+          <RNView style={[styles.restSheetContainer, dynamicStyles.card]}>
+            <RNView style={[styles.restSheetHandle, dynamicStyles.borderBg]} />
+            <Text style={[styles.restSheetTitle, dynamicStyles.text]}>다음 세트 추천</Text>
+            <Text style={[styles.rpeRecSubtitle, dynamicStyles.textSecondary]}>
+              이전 RPE를 기반으로 계산된 추천입니다
+            </Text>
+            <RNView style={styles.rpeRecOptions}>
+              {rpeRecommendations.map((rec, index) => (
+                <Pressable
+                  key={index}
+                  style={[styles.rpeRecOption, dynamicStyles.cardSecondary]}
+                  onPress={() => applyRpeRecommendation(rec)}
+                >
+                  <RNView style={styles.rpeRecOptionContent}>
+                    <Text style={[styles.rpeRecWeight, dynamicStyles.text]}>
+                      {rec.weight}kg × {rec.reps}회
+                    </Text>
+                    <Text style={[styles.rpeRecReason, dynamicStyles.textTertiary]}>
+                      {rec.reason}
+                    </Text>
+                  </RNView>
+                </Pressable>
+              ))}
+            </RNView>
+            <Pressable style={styles.rpeRecSkipBtn} onPress={skipRpeRecommendation}>
+              <Text style={[styles.rpeRecSkipText, dynamicStyles.textSecondary]}>추천 건너뛰기</Text>
+            </Pressable>
+          </RNView>
+        </>
+      )}
+
       {/* 휴식 시간 선택 (하단 Sheet) */}
-      {showRestPicker && !restTimerActive && !showRpePicker && (
+      {showRestPicker && !restTimerActive && !showRpePicker && !showRpeRecommendation && (
         <>
           <Pressable style={styles.restSheetOverlay} onPress={skipRest} />
           <RNView style={[styles.restSheetContainer, dynamicStyles.card]}>
@@ -2703,6 +2809,43 @@ const styles = StyleSheet.create({
   setRpeText: {
     fontSize: 13,
     fontWeight: '700',
+  },
+
+  // RPE 추천 스타일
+  rpeRecSubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  rpeRecOptions: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  rpeRecOption: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+  },
+  rpeRecOptionContent: {
+    alignItems: 'center',
+  },
+  rpeRecWeight: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  rpeRecReason: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  rpeRecSkipBtn: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 12,
+  },
+  rpeRecSkipText: {
+    fontSize: 15,
+    fontWeight: '500',
   },
 
   // ===== 완료된 세트 스타일 (녹색 강조) =====

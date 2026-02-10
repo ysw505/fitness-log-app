@@ -262,7 +262,7 @@ ${image_context}
 
     git add -A
     git reset -- e2e/screenshots/ test-results/ playwright-report/ 2>/dev/null || true
-    git reset -- '*.apk' '*.aab' '*.ipa' download/ scripts/auto-reply.log 2>/dev/null || true
+    git reset -- '*.apk' '*.aab' '*.ipa' download/ scripts/auto-reply.log .env 2>/dev/null || true
     git commit -m "Fix: issue #${issue_number} - ${issue_title}
 
 ${content_line}

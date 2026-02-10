@@ -93,7 +93,7 @@ if [ "$issue_count" -eq 0 ]; then
   exit 0
 fi
 
-echo "$issues" | jq -c '.[]' | while read -r issue; do
+while read -r issue; do
   issue_number=$(echo "$issue" | jq -r '.number')
   issue_title=$(echo "$issue" | jq -r '.title')
   issue_body=$(echo "$issue" | jq -r '.body // ""')
@@ -117,11 +117,11 @@ echo "$issues" | jq -c '.[]' | while read -r issue; do
   cd "$PROJECT_DIR"
   git checkout -- e2e/screenshots/ 2>/dev/null || true
   rm -rf test-results/ 2>/dev/null || true
-  git checkout master 2>/dev/null
+  git checkout master 2>/dev/null || true
   git pull origin master 2>/dev/null || true
   git branch -D "$branch_name" 2>/dev/null || true
   git checkout -b "$branch_name"
-  log "#${issue_number} - 브랜치 생성: ${branch_name}"
+  log "#${issue_number} - 브랜치 생성: ${branch_name} (현재: $(git branch --show-current))"
 
   # 3단계: 이미지 다운로드
   image_context=""
@@ -360,6 +360,6 @@ ${screenshot_markdown}"
 
   rm -f /tmp/issue-${issue_number}-img-*.jpg 2>/dev/null
 
-done
+done < <(echo "$issues" | jq -c '.[]')
 
 log "전체 처리 완료"
